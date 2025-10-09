@@ -1,0 +1,70 @@
+{
+  "name": "ollama-api-pool",
+  "version": "1.0.0",
+  "description": "🚀 基于 Cloudflare Workers 的 Ollama API 代理池 - 支持多账号轮询、自动故障转移、负载均衡和统一鉴权。高可用、边缘计算、OpenAI 兼容的 AI 模型 API 网关。",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "tail": "wrangler tail",
+    "publish": "wrangler deploy --env production"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dext7r/ollama-api-pool.git"
+  },
+  "keywords": [
+    "ollama",
+    "ollama-api",
+    "api-pool",
+    "api-gateway",
+    "api-proxy",
+    "load-balancer",
+    "load-balancing",
+    "fault-tolerance",
+    "high-availability",
+    "cloudflare",
+    "cloudflare-workers",
+    "workers",
+    "serverless",
+    "edge-computing",
+    "openai-compatible",
+    "llm",
+    "llm-api",
+    "ai",
+    "ai-gateway",
+    "machine-learning",
+    "ml",
+    "artificial-intelligence",
+    "api-management",
+    "api-authentication",
+    "round-robin",
+    "health-check",
+    "analytics"
+  ],
+  "author": {
+    "name": "dext7r",
+    "email": "h7ml@qq.com",
+    "url": "https://github.com/dext7r"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/dext7r/ollama-api-pool/issues"
+  },
+  "homepage": "https://ollama-api-pool.h7ml.workers.dev",
+  "documentation": "https://ollama-api-pool.h7ml.workers.dev/api-docs",
+  "demo": "https://ollama-api-pool.h7ml.workers.dev",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "dependencies": {
+    "wrangler": "^4.42.1"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/dext7r"
+  }
+}
