@@ -257,6 +257,16 @@ ADMIN_TOKEN = "your-admin-secret-token"  # 管理后台密钥
 ENABLE_ANALYTICS = "true"                # 启用统计
 ```
 
+## 📚 文档
+
+- **[配置指南](./CONFIGURATION.md)** - 详细的环境变量配置说明
+- **[优化措施](./OPTIMIZATION.md)** - KV 优化和性能调优
+- **[贡献指南](./CONTRIBUTING.md)** - 如何参与项目开发
+- **[API 文档](https://ollama-api-pool.h7ml.workers.dev/api-docs)** - 在线 API 文档
+- **[实时统计](https://ollama-api-pool.h7ml.workers.dev/stats)** - 公开统计图表
+
+---
+
 ## 📊 工作原理
 
 ### 请求流程

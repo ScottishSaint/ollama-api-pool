@@ -9,10 +9,19 @@ import {
   hashApiKey
 } from './keyManager';
 import { createClientToken, listClientTokens, deleteClientToken } from './auth';
+import {
+  getCachedStats, setCachedStats, invalidateCache, clearAllCache, getCacheStats
+} from './cache';
 
 export async function handleAdmin(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
+
+  // 公开统计 API（无需鉴权）
+  if (path === '/admin/public-stats' && request.method === 'GET') {
+    const stats = await getPublicStats(env);
+    return jsonResponse(stats);
+  }
 
   // 验证管理员权限
   const authHeader = request.headers.get('Authorization');
@@ -121,6 +130,22 @@ export async function handleAdmin(request, env) {
     const results = await healthCheckAll(env);
     return jsonResponse({ results });
 
+  } else if (path === '/admin/cache/stats' && request.method === 'GET') {
+    // 获取缓存统计
+    const stats = await getCacheStats(env);
+    return jsonResponse(stats);
+
+  } else if (path === '/admin/cache/clear' && request.method === 'POST') {
+    // 清除所有缓存
+    const { pattern } = await request.json();
+    if (pattern) {
+      await invalidateCache(env, pattern);
+      return jsonResponse({ success: true, message: `清除缓存: ${pattern}*` });
+    } else {
+      await clearAllCache(env);
+      return jsonResponse({ success: true, message: '已清除所有缓存' });
+    }
+
   } else if (path === '/admin/import' && request.method === 'POST') {
     // 批量导入账号（支持多种格式）
     const { accounts } = await request.json();
@@ -186,8 +211,14 @@ function parseOllamaTxt(content) {
   return keys;
 }
 
-// 获取统计信息（优化版：避免遍历所有 keys）
+// 获取统计信息（含全局请求统计，带缓存）
 async function getStats(env) {
+  // 尝试从缓存获取
+  const cached = await getCachedStats(env, 'global');
+  if (cached) {
+    return cached;
+  }
+
   // 只获取 API Keys 列表长度，不获取详细信息
   const keysListData = await env.API_KEYS.get('api_keys_list');
   const apiKeys = keysListData ? JSON.parse(keysListData) : [];
@@ -195,15 +226,35 @@ async function getStats(env) {
   // 获取 client tokens 数量（只统计数量）
   const clientTokensList = await env.API_KEYS.list({ prefix: 'client_token:' });
 
-  return {
+  // 获取全局统计数据
+  const globalStatsData = await env.API_KEYS.get('global_stats');
+  const globalStats = globalStatsData ? JSON.parse(globalStatsData) : {
+    totalRequests: 0,
+    successCount: 0,
+    failureCount: 0
+  };
+
+  // 计算成功率
+  const successRate = globalStats.totalRequests > 0
+    ? ((globalStats.successCount / globalStats.totalRequests) * 100).toFixed(2)
+    : '0.00';
+
+  const stats = {
     total_api_keys: apiKeys.length,
     active_keys: apiKeys.length, // 简化统计，不逐个检查状态
     failed_keys: 0, // 简化统计
     total_client_tokens: clientTokensList.keys.length,
-    total_requests: 0, // TODO: 实现请求计数
-    success_rate: 0, // TODO: 实现成功率统计
+    total_requests: globalStats.totalRequests,
+    success_count: globalStats.successCount,
+    failure_count: globalStats.failureCount,
+    success_rate: successRate,
     timestamp: new Date().toISOString()
   };
+
+  // 缓存结果
+  await setCachedStats(env, 'global', stats);
+
+  return stats;
 }
 
 // 分页获取 API Keys（优化版 - 快速版本，不查询每个key的详细状态）
@@ -567,4 +618,231 @@ async function batchRemoveApiKeys(env, apiKeys) {
     failed,
     total: apiKeys.length
   };
+}
+
+/**
+ * 获取公开统计数据（供前端图表使用，带缓存）
+ */
+async function getPublicStats(env) {
+  try {
+    // 尝试从缓存获取
+    const cached = await getCachedStats(env, 'public');
+    if (cached) {
+      return cached;
+    }
+
+    // 全局统计
+    const globalStatsData = await env.API_KEYS.get('global_stats');
+    const globalStats = globalStatsData ? JSON.parse(globalStatsData) : {
+      totalRequests: 0,
+      successCount: 0,
+      failureCount: 0
+    };
+
+    // 获取所有模型统计
+    const modelStatsList = await env.API_KEYS.list({ prefix: 'model_stats:' });
+    const models = [];
+
+    for (const item of modelStatsList.keys) {
+      const data = await env.API_KEYS.get(item.name);
+      if (data) {
+        try {
+          models.push(JSON.parse(data));
+        } catch (e) {
+          console.error('Failed to parse model stats:', e);
+        }
+      }
+    }
+
+    // 按请求数排序，取前10
+    const topModels = models
+      .sort((a, b) => b.totalRequests - a.totalRequests)
+      .slice(0, 10)
+      .map(m => ({
+        model: m.model,
+        requests: m.totalRequests,
+        success: m.successCount,
+        failure: m.failureCount,
+        successRate: m.totalRequests > 0 ? ((m.successCount / m.totalRequests) * 100).toFixed(2) : '0.00'
+      }));
+
+    // 获取最近24小时每小时的统计
+    const hourlyStats = await getHourlyStats(env, 24);
+
+    // 获取最近1小时的Top3模型
+    const recentTopModels = await getRecentTopModels(env, 1, 3);
+
+    const result = {
+      global: {
+        totalRequests: globalStats.totalRequests,
+        successCount: globalStats.successCount,
+        failureCount: globalStats.failureCount,
+        successRate: globalStats.totalRequests > 0
+          ? ((globalStats.successCount / globalStats.totalRequests) * 100).toFixed(2)
+          : '0.00',
+        lastUpdated: globalStats.lastUpdated || new Date().toISOString()
+      },
+      topModels: topModels || [], // Top 10 模型（24小时）
+      recentTopModels: recentTopModels || [], // 最近1小时 Top 3
+      hourlyTrend: hourlyStats || [], // 24小时趋势
+      timestamp: new Date().toISOString()
+    };
+
+    // 缓存结果
+    await setCachedStats(env, 'public', result);
+
+    return result;
+  } catch (error) {
+    console.error('getPublicStats error:', error);
+    // 返回默认数据，避免前端报错
+    return {
+      global: {
+        totalRequests: 0,
+        successCount: 0,
+        failureCount: 0,
+        successRate: '0.00',
+        lastUpdated: new Date().toISOString()
+      },
+      topModels: [],
+      recentTopModels: [],
+      hourlyTrend: Array.from({ length: 24 }, (_, i) => {
+        const time = new Date(Date.now() - (23 - i) * 3600000);
+        return {
+          hour: time.toISOString().slice(11, 16),
+          requests: 0,
+          success: 0,
+          failure: 0
+        };
+      }),
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+/**
+ * 获取最近N小时的每小时统计
+ */
+async function getHourlyStats(env, hours) {
+  try {
+    const now = new Date();
+    const stats = [];
+
+    // 优化：只调用一次 list(),避免 KV 操作限制
+    const hourlyList = await env.API_KEYS.list({ prefix: `model_hourly:`, limit: 1000 });
+
+    // 构建小时到数据的映射
+    const hourDataMap = new Map();
+
+    for (const item of hourlyList.keys) {
+      try {
+        const data = await env.API_KEYS.get(item.name);
+        if (data) {
+          const hourData = JSON.parse(data);
+          const hour = hourData.hour; // 从数据中提取小时
+
+          if (!hourDataMap.has(hour)) {
+            hourDataMap.set(hour, { requests: 0, success: 0, failure: 0 });
+          }
+
+          const existing = hourDataMap.get(hour);
+          existing.requests += hourData.requests || 0;
+          existing.success += hourData.success || 0;
+          existing.failure += hourData.failure || 0;
+        }
+      } catch (e) {
+        console.error('Failed to parse hourly data:', item.name, e);
+      }
+    }
+
+    // 生成最近 N 小时的统计
+    for (let i = hours - 1; i >= 0; i--) {
+      const time = new Date(now.getTime() - i * 3600000);
+      const hour = time.toISOString().slice(0, 13);
+      const hourData = hourDataMap.get(hour) || { requests: 0, success: 0, failure: 0 };
+
+      stats.push({
+        hour: time.toISOString().slice(11, 16), // HH:mm
+        requests: hourData.requests,
+        success: hourData.success,
+        failure: hourData.failure
+      });
+    }
+
+    return stats;
+  } catch (error) {
+    console.error('getHourlyStats error:', error);
+    // 返回空数据占位
+    return Array.from({ length: hours }, (_, i) => {
+      const time = new Date(Date.now() - (hours - 1 - i) * 3600000);
+      return {
+        hour: time.toISOString().slice(11, 16),
+        requests: 0,
+        success: 0,
+        failure: 0
+      };
+    });
+  }
+}
+
+/**
+ * 获取最近N小时的Top N模型
+ */
+async function getRecentTopModels(env, hours, topN = 3) {
+  try {
+    const now = new Date();
+    const modelMap = new Map();
+
+    // 优化：只调用一次 list(),避免 KV 操作限制
+    const hourlyList = await env.API_KEYS.list({ prefix: `model_hourly:`, limit: 1000 });
+
+    // 计算需要的小时范围
+    const targetHours = new Set();
+    for (let i = 0; i < hours; i++) {
+      const time = new Date(now.getTime() - i * 3600000);
+      targetHours.add(time.toISOString().slice(0, 13));
+    }
+
+    // 遍历所有条目并过滤目标小时
+    for (const item of hourlyList.keys) {
+      try {
+        const data = await env.API_KEYS.get(item.name);
+        if (data) {
+          const hourData = JSON.parse(data);
+          const hour = hourData.hour;
+
+          // 只统计目标小时范围内的数据
+          if (targetHours.has(hour)) {
+            const modelName = hourData.model;
+
+            if (!modelMap.has(modelName)) {
+              modelMap.set(modelName, { requests: 0, success: 0, failure: 0 });
+            }
+
+            const stats = modelMap.get(modelName);
+            stats.requests += hourData.requests || 0;
+            stats.success += hourData.success || 0;
+            stats.failure += hourData.failure || 0;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse recent model data:', item.name, e);
+      }
+    }
+
+    // 转换为数组并排序
+    const modelsArray = Array.from(modelMap.entries()).map(([model, stats]) => ({
+      model,
+      requests: stats.requests,
+      success: stats.success,
+      failure: stats.failure,
+      successRate: stats.requests > 0 ? ((stats.success / stats.requests) * 100).toFixed(2) : '0.00'
+    }));
+
+    return modelsArray
+      .sort((a, b) => b.requests - a.requests)
+      .slice(0, topN);
+  } catch (error) {
+    console.error('getRecentTopModels error:', error);
+    return [];
+  }
 }

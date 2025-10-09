@@ -14,6 +14,7 @@ import { handleAuth } from './auth';
 import { handleAdmin } from './admin';
 import { handleDashboard } from './dashboard';
 import { corsHeaders, jsonResponse, errorResponse } from './utils';
+import { getCachedModels, setCachedModels } from './cache';
 
 export default {
   async fetch(request, env, ctx) {
@@ -55,6 +56,9 @@ export default {
       if (path === '/' || path === '/dashboard') {
         // 管理后台首页
         return handleDashboard(request, env);
+      } else if (path === '/stats') {
+        // 公开统计页面
+        return handleStaticHtml('/stats.html');
       } else if (path === '/api-docs') {
         // API 使用文档
         return handleStaticHtml('/api-docs.html');
@@ -90,6 +94,7 @@ export default {
             homepage: 'https://ollama-api-pool.h7ml.workers.dev',
             repository: 'https://github.com/dext7r/ollama-api-pool',
             documentation: 'https://ollama-api-pool.h7ml.workers.dev/api-docs',
+            statistics: 'https://ollama-api-pool.h7ml.workers.dev/stats',
             license: 'MIT'
           },
           author: {
@@ -133,6 +138,19 @@ async function handleModels(request, env) {
       }
     }
 
+    // 尝试从缓存获取
+    const cachedModels = await getCachedModels(env);
+    if (cachedModels) {
+      return new Response(JSON.stringify(cachedModels), {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Cache': 'HIT',
+          'Cache-Control': 'public, max-age=300',
+          ...corsHeaders
+        }
+      });
+    }
+
     // 获取一个可用的 API Key 用于获取模型列表
     const { getNextApiKey } = await import('./keyManager');
     const apiKey = await getNextApiKey(env);
@@ -165,9 +183,21 @@ async function handleModels(request, env) {
       parent: null
     }));
 
-    return jsonResponse({
+    const result = {
       object: 'list',
       data: models
+    };
+
+    // 缓存结果
+    await setCachedModels(env, result);
+
+    return new Response(JSON.stringify(result), {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Cache': 'MISS',
+        'Cache-Control': 'public, max-age=300',
+        ...corsHeaders
+      }
     });
 
   } catch (error) {
@@ -178,7 +208,10 @@ async function handleModels(request, env) {
 
 // 处理静态 JS 文件
 async function handleStaticJs(path) {
-  if (path === '/js/login.js') {
+  // 移除查询参数（如 ?v=2）
+  const cleanPath = path.split('?')[0];
+
+  if (cleanPath === '/js/login.js') {
     const { loginJs } = await import('./static/login-js');
     return new Response(loginJs, {
       headers: {
@@ -186,7 +219,7 @@ async function handleStaticJs(path) {
         'Cache-Control': 'public, max-age=3600'
       }
     });
-  } else if (path === '/js/dashboard.js') {
+  } else if (cleanPath === '/js/dashboard.js') {
     const { dashboardJs } = await import('./static/dashboard-js');
     return new Response(dashboardJs, {
       headers: {
@@ -213,6 +246,15 @@ async function handleStaticHtml(path) {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'public, max-age=3600'
+      }
+    });
+  } else if (path === '/stats.html') {
+    const { statsHtml } = await import('./static/stats-html');
+
+    return new Response(statsHtml, {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=300'
       }
     });
   }

@@ -3,8 +3,6 @@
  * 负责 API Key 的轮询、失败标记、健康检查
  */
 
-let currentIndex = 0;
-
 // 生成 API Key 的哈希值（用于 KV Key，避免超过 512 字节限制）
 export async function hashApiKey(apiKey) {
   const encoder = new TextEncoder();
@@ -14,31 +12,41 @@ export async function hashApiKey(apiKey) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// 获取下一个可用的 API Key（优化版：不检查失败状态，直接轮询）
+/**
+ * 获取下一个可用的 API Key（简化版：随机选择）
+ * 直接从所有 Key 中随机选择一个，不检查状态（性能优先）
+ */
 export async function getNextApiKey(env) {
-  const keysData = await env.API_KEYS.get('api_keys_list');
-  if (!keysData) {
+  try {
+    const keysData = await env.API_KEYS.get('api_keys_list');
+    if (!keysData) {
+      return null;
+    }
+
+    const keys = JSON.parse(keysData);
+    if (!keys || keys.length === 0) {
+      return null;
+    }
+
+    // 随机选择一个 Key
+    const randomIndex = Math.floor(Math.random() * keys.length);
+    return keys[randomIndex];
+  } catch (error) {
+    console.error('getNextApiKey error:', error);
     return null;
   }
-
-  const keys = JSON.parse(keysData);
-  if (!keys || keys.length === 0) {
-    return null;
-  }
-
-  // 简单轮询，不检查失败状态（由重试机制处理失败）
-  const selectedKey = keys[currentIndex % keys.length];
-  currentIndex++;
-
-  return selectedKey;
 }
 
 // 标记 API Key 失效 (1小时)
 export async function markApiKeyFailed(env, apiKey) {
-  const keyHash = await hashApiKey(apiKey);
-  await env.API_KEYS.put(`failed:${keyHash}`, '1', {
-    expirationTtl: 3600 // 1小时后自动恢复
-  });
+  try {
+    const keyHash = await hashApiKey(apiKey);
+    await env.API_KEYS.put(`failed:${keyHash}`, '1', {
+      expirationTtl: 3600 // 1小时后自动恢复
+    });
+  } catch (error) {
+    console.error('markApiKeyFailed error:', error);
+  }
 }
 
 // 添加 API Key
@@ -93,21 +101,24 @@ export async function removeApiKey(env, apiKey) {
   return false;
 }
 
-// 获取所有 API Key 列表
+// 获取所有 API Key 列表（优化版：批量并行查询）
 export async function listApiKeys(env) {
   const keysData = await env.API_KEYS.get('api_keys_list');
   if (!keysData) return [];
 
   const keys = JSON.parse(keysData);
-  const result = [];
 
-  for (const key of keys) {
+  // 优化：使用 Promise.all 批量并行查询，减少等待时间
+  const keyPromises = keys.map(async (key) => {
     const keyHash = await hashApiKey(key);
-    const failed = await env.API_KEYS.get(`failed:${keyHash}`);
-    const disabled = await env.API_KEYS.get(`disabled:${keyHash}`);
 
-    // 获取元数据（包含 username 和 TTL）
-    const metadataStr = await env.API_KEYS.get(`key_metadata:${keyHash}`);
+    // 并行获取所有相关数据
+    const [failed, disabled, metadataStr] = await Promise.all([
+      env.API_KEYS.get(`failed:${keyHash}`),
+      env.API_KEYS.get(`disabled:${keyHash}`),
+      env.API_KEYS.get(`key_metadata:${keyHash}`)
+    ]);
+
     const metadata = metadataStr ? JSON.parse(metadataStr) : {};
 
     // 判断状态：disabled > failed > active
@@ -127,16 +138,16 @@ export async function listApiKeys(env) {
       }
     }
 
-    result.push({
+    return {
       api_key: key,
       username: metadata.username || 'N/A',
       status,
       created_at: metadata.createdAt || null,
       expires_at: metadata.expiresAt || null
-    });
-  }
+    };
+  });
 
-  return result;
+  return await Promise.all(keyPromises);
 }
 
 // 批量导入 API Keys
@@ -240,7 +251,7 @@ export async function healthCheck(env, apiKey) {
   }
 }
 
-// 批量健康检查
+// 批量健康检查（优化版：只标记失败的 Key）
 export async function healthCheckAll(env) {
   const keysData = await env.API_KEYS.get('api_keys_list');
   if (!keysData) return [];
@@ -256,13 +267,12 @@ export async function healthCheckAll(env) {
       ...health
     });
 
-    // 如果健康检查失败,标记为失效
+    // 只在失败时写入 KV，成功时不操作（节省 KV 写入）
     if (!health.healthy) {
       await markApiKeyFailed(env, key);
-    } else {
-      // 如果健康检查成功,移除失效标记
-      await enableApiKey(env, key);
     }
+    // 移除自动启用逻辑，减少 KV 写入
+    // 如需启用，请手动调用 enableApiKey
   }
 
   return results;

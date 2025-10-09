@@ -114,7 +114,11 @@ export const loginHtml = `<!DOCTYPE html>
                         📚 API 文档
                     </a>
                     <span class="text-gray-300">|</span>
-                    <a href="/health" target="_blank" class="text-sm text-purple-600 hover:text-purple-700 font-medium">
+                    <a href="/stats" target="_blank" class="text-sm text-purple-600 hover:text-purple-700 font-medium">
+                        📊 实时统计
+                    </a>
+                    <span class="text-gray-300">|</span>
+                    <a href="/health" target="_blank" class="text-sm text-green-600 hover:text-green-700 font-medium">
                         🏥 系统状态
                     </a>
                     <span class="text-gray-300">|</span>

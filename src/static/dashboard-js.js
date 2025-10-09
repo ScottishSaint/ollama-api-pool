@@ -929,7 +929,7 @@ async function importAccounts() {
 async function loadStats() {
     try {
         const response = await fetch('/admin/stats', {
-            headers: { 'Authorization': \`Bearer \${getToken()}\` }
+            headers: { 'Authorization': 'Bearer ' + getToken() }
         });
 
         if (!response.ok) throw new Error('加载失败');
@@ -949,7 +949,20 @@ async function loadStats() {
             $('#stats-failed-keys').text(data.failed_keys || 0);
             $('#stats-client-tokens').text(data.total_client_tokens || 0);
             $('#stats-total-requests').text(data.total_requests || 0);
-            $('#stats-success-rate').text(data.success_rate ? \`\${data.success_rate}%\` : '0%');
+
+            // 显示成功/失败次数和百分比
+            const successCount = data.success_count || 0;
+            const failureCount = data.failure_count || 0;
+            const successRate = data.success_rate || '0.00';
+
+            $('#stats-success-rate').html(\`
+                <span class="text-3xl font-bold text-gray-900">\${successRate}%</span>
+                <div class="mt-2 text-sm text-gray-500">
+                    <span class="text-green-600">✓ 成功: \${successCount.toLocaleString()}</span>
+                    <span class="mx-2">·</span>
+                    <span class="text-red-600">✗ 失败: \${failureCount.toLocaleString()}</span>
+                </div>
+            \`);
         }
     } catch (error) {
         console.error('加载统计数据失败:', error);
