@@ -9,6 +9,8 @@ import { getNextApiKey, markApiKeyFailed } from './keyManager';
 import { verifyClientToken } from './auth';
 import { errorResponse, jsonResponse, corsHeaders } from './utils';
 import { getCachedResponse, setCachedResponse } from './cache';
+import { isRedisEnabled, redisIncr, redisExpire } from './redis';
+import { isPostgresEnabled, pgRecordKeyStats, pgIncrementGlobalStats } from './postgres';
 
 const OLLAMA_API_URL = 'https://ollama.com/v1/chat/completions';
 const MAX_RETRIES = 3;
@@ -39,9 +41,16 @@ export async function handleProxyRequest(request, env) {
     // 2. 速率限制（可选，会消耗 KV 读取）
     if (enableRateLimit) {
       const rateLimitKey = `ratelimit:${clientIP}:${Math.floor(Date.now() / (rateLimitWindow * 1000))}`;
-      const currentCount = await env.API_KEYS.get(rateLimitKey);
-      if (currentCount && parseInt(currentCount) > rateLimitRequests) {
-        return errorResponse(`Rate limit exceeded. Max ${rateLimitRequests} requests per ${rateLimitWindow}s.`, 429);
+      if (isRedisEnabled(env)) {
+        const count = await applyRedisRateLimit(env, rateLimitKey, rateLimitWindow);
+        if (count !== null && count > rateLimitRequests) {
+          return errorResponse(`Rate limit exceeded. Max ${rateLimitRequests} requests per ${rateLimitWindow}s.`, 429);
+        }
+      } else {
+        const currentCount = await env.API_KEYS.get(rateLimitKey);
+        if (currentCount && parseInt(currentCount, 10) > rateLimitRequests) {
+          return errorResponse(`Rate limit exceeded. Max ${rateLimitRequests} requests per ${rateLimitWindow}s.`, 429);
+        }
       }
     }
 
@@ -160,10 +169,25 @@ export async function handleProxyRequest(request, env) {
   }
 }
 
+async function applyRedisRateLimit(env, key, windowSeconds) {
+  const count = await redisIncr(env, key);
+  if (count === null || Number.isNaN(count)) {
+    return null;
+  }
+
+  if (count === 1 && windowSeconds > 0) {
+    await redisExpire(env, key, windowSeconds);
+  }
+
+  return count;
+}
+
 // 记录使用情况（可配置版本：通过环境变量控制采样率）
 async function recordUsage(env, clientToken, apiKey, statusCode, modelName) {
   const isSuccess = statusCode >= 200 && statusCode < 300;
   const enableAnalytics = env.ENABLE_ANALYTICS === 'true';
+
+  await updateGlobalStatsAccurate(env, isSuccess);
 
   // 仅在失败时记录，用于自动禁用 API Key
   if (!isSuccess) {
@@ -175,11 +199,6 @@ async function recordUsage(env, clientToken, apiKey, statusCode, modelName) {
     const statsSampleRate = parseFloat(env.STATS_SAMPLE_RATE || '0.1');
     const modelStatsSampleRate = parseFloat(env.MODEL_STATS_SAMPLE_RATE || '0.2');
 
-    // 全局统计采样
-    if (Math.random() < statsSampleRate) {
-      await updateGlobalStats(env, isSuccess);
-    }
-
     // 模型统计采样
     if (Math.random() < modelStatsSampleRate) {
       await recordModelStats(env, modelName, statusCode);
@@ -190,6 +209,12 @@ async function recordUsage(env, clientToken, apiKey, statusCode, modelName) {
 
 // 记录 API Key 统计信息
 async function recordKeyStats(env, apiKey, statusCode) {
+  if (isPostgresEnabled(env)) {
+    const isSuccess = statusCode >= 200 && statusCode < 300;
+    await pgRecordKeyStats(env, apiKey, { isSuccess });
+    return;
+  }
+
   const statsKey = `key_stats:${apiKey}`;
   const isSuccess = statusCode >= 200 && statusCode < 300;
 
@@ -230,9 +255,6 @@ async function recordKeyStats(env, apiKey, statusCode) {
     expirationTtl: 2592000
   });
 
-  // 更新全局统计
-  await updateGlobalStats(env, isSuccess);
-
   // 智能禁用逻辑: 连续失败 3 次自动禁用 1 小时
   if (stats.consecutiveFailures >= 3) {
     await env.API_KEYS.put(`failed:${apiKey}`, 'auto-disabled', {
@@ -241,8 +263,8 @@ async function recordKeyStats(env, apiKey, statusCode) {
   }
 }
 
-// 更新全局统计信息
-async function updateGlobalStats(env, isSuccess) {
+// 更新全局统计信息（KV 版本）
+async function updateGlobalStatsKV(env, isSuccess) {
   const globalStatsData = await env.API_KEYS.get('global_stats');
   let globalStats = globalStatsData ? JSON.parse(globalStatsData) : {
     totalRequests: 0,
@@ -261,6 +283,17 @@ async function updateGlobalStats(env, isSuccess) {
 
   // 保存全局统计（永久保存）
   await env.API_KEYS.put('global_stats', JSON.stringify(globalStats));
+}
+
+async function updateGlobalStatsAccurate(env, isSuccess) {
+  if (isPostgresEnabled(env)) {
+    const ok = await pgIncrementGlobalStats(env, { isSuccess });
+    if (ok) {
+      return;
+    }
+  }
+
+  await updateGlobalStatsKV(env, isSuccess);
 }
 
 // 记录模型统计信息（支持24小时和1小时时间窗口）

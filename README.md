@@ -44,6 +44,7 @@
 - 🔍 **验证导入** - 逐行验证 API Key 有效性并自动分类
 - 🎛️ **管理后台** - Web 界面管理 API Keys 和客户端 Tokens
 - ⚡ **高性能** - 基于 Cloudflare Workers，全球 CDN 加速
+- 🗄️ **多层存储** - 支持 PostgreSQL + Redis + KV 混合架构，建议启用数据库与缓存承载大规模流量
 
 ## 🚀 快速开始
 
@@ -255,7 +256,64 @@ id = "your-accounts-kv-id"
 [vars]
 ADMIN_TOKEN = "your-admin-secret-token"  # 管理后台密钥
 ENABLE_ANALYTICS = "true"                # 启用统计
+REDIS_URL = "rediss://default:***@tidy-caribou-11305.upstash.io:6379"  # 可选：Redis 缓存与限流
+DATABASE_URL = "postgresql://postgres.inswmaagqjqgqxzxuxlp:***@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true"  # 可选：Supabase PostgreSQL
+SUPABASE_REST_URL = "https://inswmaagqjqgqxzxuxlp.supabase.co/rest/v1"  # 建议显式配置 REST 端点
+SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOi..."  # 必填：Supabase Service Role Key
 ```
+
+> ✅ 推荐组合：**PostgreSQL（Supabase）+ Redis（Upstash）**。启用 `DATABASE_URL` 与 `REDIS_URL` 后，Worker 会优先使用数据库与缓存存储，Cloudflare KV 只作为回退通道，可稳定承载十万级账号池或高频调用。
+
+### PostgreSQL（Supabase）集成
+
+1. 在 Supabase 中创建数据库，并保证所有表名以 `ollama_api_` 开头；
+2. 建议使用如下最小表结构：
+
+```sql
+create table if not exists ollama_api_keys (
+  api_key text primary key,
+  username text,
+  status text default 'active',
+  created_at timestamptz default now(),
+  expires_at timestamptz,
+  failed_until timestamptz,
+  disabled_until timestamptz,
+  consecutive_failures integer default 0
+);
+
+create table if not exists ollama_api_key_stats (
+  api_key text primary key references ollama_api_keys(api_key) on delete cascade,
+  total_requests bigint default 0,
+  success_count bigint default 0,
+  failure_count bigint default 0,
+  success_rate numeric default 0,
+  last_used timestamptz,
+  last_success timestamptz,
+  last_failure timestamptz,
+  consecutive_failures integer default 0,
+  created_at timestamptz default now()
+);
+
+create table if not exists ollama_api_client_tokens (
+  token text primary key,
+  name text,
+  created_at timestamptz default now(),
+  expires_at timestamptz,
+  request_count bigint default 0
+);
+
+create table if not exists ollama_api_global_stats (
+  id text primary key default 'global',
+  total_requests bigint default 0,
+  success_count bigint default 0,
+  failure_count bigint default 0,
+  updated_at timestamptz default now()
+);
+```
+
+3. 在 Supabase 项目设置中获取 `Service Role Key`，写入 `SUPABASE_SERVICE_ROLE_KEY`；
+4. 如果未填写 `SUPABASE_REST_URL`，Worker 会尝试根据 `DATABASE_URL` 自动推断，但显式设置更可靠；
+5. 部署后，API Key、客户端 Token 与统计将优先写入 PostgreSQL，KV 仅作为兜底。
 
 ## 📚 文档
 

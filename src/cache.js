@@ -3,6 +3,14 @@
  * 提供多层缓存策略以提升性能
  */
 
+import {
+  isRedisEnabled,
+  redisGet,
+  redisSet,
+  redisDeleteMany,
+  redisScanPattern
+} from './redis';
+
 // 缓存配置
 const CACHE_CONFIG = {
   // 响应缓存（非流式请求）
@@ -24,7 +32,7 @@ const CACHE_CONFIG = {
   // 统计数据缓存
   stats: {
     enabled: true,
-    ttl: 60 // 60秒（KV 最小 TTL 要求）
+    ttl: 60 // Cloudflare KV 最小 TTL 为 60 秒
   }
 };
 
@@ -48,12 +56,29 @@ export async function getCachedResponse(env, requestBody) {
     return null;
   }
 
-  const cacheKey = await generateCacheKey('response', {
+  const cachePayload = {
     model: requestBody.model,
     messages: requestBody.messages,
     temperature: requestBody.temperature || 1.0,
     max_tokens: requestBody.max_tokens
-  });
+  };
+
+  const cacheKey = await generateCacheKey('response', cachePayload);
+
+  // Redis 优先
+  if (isRedisEnabled(env)) {
+    const redisValue = await redisGet(env, cacheKey);
+    if (redisValue) {
+      try {
+        const parsed = JSON.parse(redisValue);
+        if (Date.now() - parsed.timestamp < CACHE_CONFIG.response.ttl * 1000) {
+          return parsed.response;
+        }
+      } catch (error) {
+        console.warn('Redis 响应缓存解析失败:', error);
+      }
+    }
+  }
 
   const cached = await env.API_KEYS.get(cacheKey);
   if (cached) {
@@ -75,17 +100,26 @@ export async function setCachedResponse(env, requestBody, response) {
     return;
   }
 
-  const cacheKey = await generateCacheKey('response', {
+  const cachePayload = {
     model: requestBody.model,
     messages: requestBody.messages,
     temperature: requestBody.temperature || 1.0,
     max_tokens: requestBody.max_tokens
-  });
+  };
+
+  const cacheKey = await generateCacheKey('response', cachePayload);
 
   const cacheData = {
     response,
     timestamp: Date.now()
   };
+
+  if (isRedisEnabled(env)) {
+    const redisResult = await redisSet(env, cacheKey, cacheData, CACHE_CONFIG.response.ttl);
+    if (!redisResult) {
+      console.warn('Redis 写入响应缓存失败，回退 KV');
+    }
+  }
 
   await env.API_KEYS.put(cacheKey, JSON.stringify(cacheData), {
     expirationTtl: CACHE_CONFIG.response.ttl
@@ -98,6 +132,20 @@ export async function setCachedResponse(env, requestBody, response) {
 export async function getCachedModels(env) {
   if (!CACHE_CONFIG.models.enabled) {
     return null;
+  }
+
+  if (isRedisEnabled(env)) {
+    const redisValue = await redisGet(env, 'cache:models:list');
+    if (redisValue) {
+      try {
+        const parsed = JSON.parse(redisValue);
+        if (Date.now() - parsed.timestamp < CACHE_CONFIG.models.ttl * 1000) {
+          return parsed.models;
+        }
+      } catch (error) {
+        console.warn('Redis 模型缓存解析失败:', error);
+      }
+    }
   }
 
   const cached = await env.API_KEYS.get('cache:models:list');
@@ -124,6 +172,13 @@ export async function setCachedModels(env, models) {
     timestamp: Date.now()
   };
 
+  if (isRedisEnabled(env)) {
+    const redisResult = await redisSet(env, 'cache:models:list', cacheData, CACHE_CONFIG.models.ttl);
+    if (!redisResult) {
+      console.warn('Redis 写入模型缓存失败，回退 KV');
+    }
+  }
+
   await env.API_KEYS.put('cache:models:list', JSON.stringify(cacheData), {
     expirationTtl: CACHE_CONFIG.models.ttl
   });
@@ -135,6 +190,20 @@ export async function setCachedModels(env, models) {
 export async function getCachedApiKeys(env) {
   if (!CACHE_CONFIG.apiKeys.enabled) {
     return null;
+  }
+
+  if (isRedisEnabled(env)) {
+    const redisValue = await redisGet(env, 'cache:apikeys:list');
+    if (redisValue) {
+      try {
+        const parsed = JSON.parse(redisValue);
+        if (Date.now() - parsed.timestamp < CACHE_CONFIG.apiKeys.ttl * 1000) {
+          return parsed.keys;
+        }
+      } catch (error) {
+        console.warn('Redis API Key 缓存解析失败:', error);
+      }
+    }
   }
 
   const cached = await env.API_KEYS.get('cache:apikeys:list');
@@ -161,6 +230,13 @@ export async function setCachedApiKeys(env, keys) {
     timestamp: Date.now()
   };
 
+  if (isRedisEnabled(env)) {
+    const redisResult = await redisSet(env, 'cache:apikeys:list', cacheData, CACHE_CONFIG.apiKeys.ttl);
+    if (!redisResult) {
+      console.warn('Redis 写入 API Key 缓存失败，回退 KV');
+    }
+  }
+
   await env.API_KEYS.put('cache:apikeys:list', JSON.stringify(cacheData), {
     expirationTtl: CACHE_CONFIG.apiKeys.ttl
   });
@@ -172,6 +248,20 @@ export async function setCachedApiKeys(env, keys) {
 export async function getCachedStats(env, statsType) {
   if (!CACHE_CONFIG.stats.enabled) {
     return null;
+  }
+
+  if (isRedisEnabled(env)) {
+    const redisValue = await redisGet(env, `cache:stats:${statsType}`);
+    if (redisValue) {
+      try {
+        const parsed = JSON.parse(redisValue);
+        if (Date.now() - parsed.timestamp < CACHE_CONFIG.stats.ttl * 1000) {
+          return parsed.stats;
+        }
+      } catch (error) {
+        console.warn('Redis 统计缓存解析失败:', error);
+      }
+    }
   }
 
   const cacheKey = `cache:stats:${statsType}`;
@@ -201,6 +291,13 @@ export async function setCachedStats(env, statsType, stats) {
     timestamp: Date.now()
   };
 
+  if (isRedisEnabled(env)) {
+    const redisResult = await redisSet(env, cacheKey, cacheData, CACHE_CONFIG.stats.ttl);
+    if (!redisResult) {
+      console.warn('Redis 写入统计缓存失败，回退 KV');
+    }
+  }
+
   await env.API_KEYS.put(cacheKey, JSON.stringify(cacheData), {
     expirationTtl: CACHE_CONFIG.stats.ttl
   });
@@ -210,6 +307,15 @@ export async function setCachedStats(env, statsType, stats) {
  * 使缓存失效
  */
 export async function invalidateCache(env, pattern) {
+  // Redis 版本
+  if (isRedisEnabled(env)) {
+    const redisPattern = pattern ? `cache:${pattern}*` : 'cache:*';
+    const keys = await redisScanPattern(env, redisPattern);
+    if (keys.length > 0) {
+      await redisDeleteMany(env, keys);
+    }
+  }
+
   const list = await env.API_KEYS.list({ prefix: `cache:${pattern}` });
 
   const deletePromises = list.keys.map(key =>
@@ -223,6 +329,13 @@ export async function invalidateCache(env, pattern) {
  * 清除所有缓存
  */
 export async function clearAllCache(env) {
+  if (isRedisEnabled(env)) {
+    const keys = await redisScanPattern(env, 'cache:*');
+    if (keys.length > 0) {
+      await redisDeleteMany(env, keys);
+    }
+  }
+
   await invalidateCache(env, '');
 }
 
@@ -232,14 +345,20 @@ export async function clearAllCache(env) {
 export async function getCacheStats(env) {
   const list = await env.API_KEYS.list({ prefix: 'cache:' });
 
+  let redisKeys = [];
+  if (isRedisEnabled(env)) {
+    redisKeys = await redisScanPattern(env, 'cache:*');
+  }
+
   const stats = {
-    totalEntries: list.keys.length,
+    totalEntries: list.keys.length + redisKeys.length,
     byType: {
       response: 0,
       models: 0,
       apiKeys: 0,
       stats: 0,
-      other: 0
+      other: 0,
+      redisOnly: 0
     }
   };
 
@@ -250,6 +369,14 @@ export async function getCacheStats(env) {
     else if (name.startsWith('cache:apikeys:')) stats.byType.apiKeys++;
     else if (name.startsWith('cache:stats:')) stats.byType.stats++;
     else stats.byType.other++;
+  }
+
+  for (const key of redisKeys) {
+    if (key.startsWith('cache:response:')) stats.byType.response++;
+    else if (key.startsWith('cache:models:')) stats.byType.models++;
+    else if (key.startsWith('cache:apikeys:')) stats.byType.apiKeys++;
+    else if (key.startsWith('cache:stats:')) stats.byType.stats++;
+    else stats.byType.redisOnly++;
   }
 
   return stats;

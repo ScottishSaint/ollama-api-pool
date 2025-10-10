@@ -6,12 +6,13 @@ import { errorResponse, jsonResponse } from './utils';
 import {
   addApiKey, removeApiKey, listApiKeys, importApiKeys,
   getAllKeyStats, disableApiKey, enableApiKey, healthCheckAll,
-  hashApiKey
+  hashApiKey, countApiKeys
 } from './keyManager';
 import { createClientToken, listClientTokens, deleteClientToken } from './auth';
 import {
   getCachedStats, setCachedStats, invalidateCache, clearAllCache, getCacheStats
 } from './cache';
+import { isPostgresEnabled, pgImportApiAccountEntries, pgGetGlobalStats } from './postgres';
 
 export async function handleAdmin(request, env) {
   const url = new URL(request.url);
@@ -219,12 +220,18 @@ async function getStats(env) {
     return cached;
   }
 
-  // 只获取 API Keys 列表长度，不获取详细信息
-  const keysListData = await env.API_KEYS.get('api_keys_list');
-  const apiKeys = keysListData ? JSON.parse(keysListData) : [];
+  const usePostgres = isPostgresEnabled(env);
 
-  // 获取 client tokens 数量（只统计数量）
-  const clientTokensList = await env.API_KEYS.list({ prefix: 'client_token:' });
+  // 获取 API Keys 与客户端 Token 信息
+  const clientTokens = await listClientTokens(env);
+  const totalApiKeys = await countApiKeys(env);
+
+  const apiKeys = await listApiKeys(env);
+
+  const totalClientTokens = Array.isArray(clientTokens) ? clientTokens.length : 0;
+  const failedKeys = Array.isArray(apiKeys)
+    ? apiKeys.filter(item => item.status && item.status !== 'active').length
+    : 0;
 
   // 获取全局统计数据
   const globalStatsData = await env.API_KEYS.get('global_stats');
@@ -239,15 +246,19 @@ async function getStats(env) {
     ? ((globalStats.successCount / globalStats.totalRequests) * 100).toFixed(2)
     : '0.00';
 
+  const normalizedFailed = Math.min(failedKeys, totalApiKeys);
+  const activeKeys = Math.max(totalApiKeys - normalizedFailed, 0);
+
   const stats = {
-    total_api_keys: apiKeys.length,
-    active_keys: apiKeys.length, // 简化统计，不逐个检查状态
-    failed_keys: 0, // 简化统计
-    total_client_tokens: clientTokensList.keys.length,
+    total_api_keys: totalApiKeys,
+    active_keys: activeKeys,
+    failed_keys: normalizedFailed,
+    total_client_tokens: totalClientTokens,
     total_requests: globalStats.totalRequests,
     success_count: globalStats.successCount,
     failure_count: globalStats.failureCount,
     success_rate: successRate,
+    storage: usePostgres ? 'postgres+kv' : 'kv',
     timestamp: new Date().toISOString()
   };
 
@@ -259,39 +270,17 @@ async function getStats(env) {
 
 // 分页获取 API Keys（优化版 - 快速版本，不查询每个key的详细状态）
 async function listApiKeysPaginated(env, page = 1, pageSize = 50) {
-  const keysListData = await env.API_KEYS.get('api_keys_list');
-  if (!keysListData) {
-    return {
-      api_keys: [],
-      total: 0,
-      page,
-      pageSize,
-      totalPages: 0
-    };
-  }
-
-  const allKeys = JSON.parse(keysListData);
-  const total = allKeys.length;
+  const total = await countApiKeys(env);
+  const allKeys = await listApiKeys(env);
   const totalPages = Math.ceil(total / pageSize);
 
   // 分页切片
   const startIndex = (page - 1) * pageSize;
   const endIndex = startIndex + pageSize;
-  const pageKeys = allKeys.slice(startIndex, endIndex);
-
-  // 只返回基本信息，不查询详细状态（极速版）
-  const result = pageKeys.map(key => ({
-    api_key: key,
-    username: null,
-    status: 'active', // 默认状态，不实时查询
-    addedAt: null,
-    expiresAt: null,
-    lastUsed: null,
-    requestCount: 0
-  }));
+  const pageKeys = Array.isArray(allKeys) ? allKeys.slice(startIndex, endIndex) : [];
 
   return {
-    api_keys: result,
+    api_keys: pageKeys,
     total,
     page,
     pageSize,
@@ -518,73 +507,133 @@ async function importAccountsFlexible(env, accounts) {
     return { success: false, error: '没有提供有效的账号数据', imported: 0 };
   }
 
-  const results = {
-    imported: 0,
-    failed: 0,
-    details: []
+  const MAX_DETAILS = 50;
+  const details = [];
+  const parseErrors = [];
+  const parsedEntries = [];
+
+  const pushDetail = (detail) => {
+    if (details.length < MAX_DETAILS) {
+      details.push(detail);
+    }
   };
 
   for (const account of accounts) {
     try {
-      let username, apiKey;
+      let username;
+      let apiKey;
 
       if (typeof account === 'string') {
-        // 纯字符串格式 - 可能是完整 session 或带 ---- 分隔的格式
         const trimmed = account.trim();
 
         if (trimmed.includes('----')) {
-          // 支持两种格式:
-          // 格式1 (5段): email----password----session----aid----apikey
-          // 格式2 (4段): email----password----session;aid=xxx----apikey
-          const parts = trimmed.split('----').map(p => p.trim());
-
+          const parts = trimmed.split('----').map(part => part.trim());
           if (parts.length >= 4) {
-            username = parts[0]; // email
-            // 直接取最后一段作为 API Key（57位token）
+            username = parts[0] || `user_${Math.random().toString(36).slice(2, 7)}`;
             apiKey = parts[parts.length - 1];
           } else {
-            results.failed++;
-            results.details.push({ error: '格式错误，分段不足', line: trimmed.substring(0, 50) });
+            parseErrors.push({ error: '格式错误，分段不足', line: trimmed.substring(0, 80) });
+            pushDetail({ error: '格式错误，分段不足', line: trimmed.substring(0, 80) });
             continue;
           }
         } else {
-          // 单行完整的 API Key（可能已经是完整格式）
-          username = `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+          username = `user_${Math.random().toString(36).slice(2, 8)}`;
           apiKey = trimmed;
         }
-      } else if (typeof account === 'object' && account.username && account.api_key) {
-        // 对象格式 { username: '...', api_key: '...' }
-        username = account.username;
-        apiKey = account.api_key;
+      } else if (typeof account === 'object' && account !== null) {
+        if (account.api_key) {
+          apiKey = account.api_key;
+          username = account.username || account.email || `user_${Math.random().toString(36).slice(2, 8)}`;
+        } else {
+          parseErrors.push({ error: '缺少 api_key 字段', data: JSON.stringify(account).substring(0, 80) });
+          pushDetail({ error: '缺少 api_key 字段', data: JSON.stringify(account).substring(0, 80) });
+          continue;
+        }
       } else {
-        results.failed++;
-        results.details.push({ error: '不支持的格式', data: JSON.stringify(account).substring(0, 50) });
+        parseErrors.push({ error: '不支持的格式', data: String(account).substring(0, 80) });
+        pushDetail({ error: '不支持的格式', data: String(account).substring(0, 80) });
         continue;
       }
 
-      // 添加到 KV
-      const success = await addApiKey(env, apiKey, username);
-
-      if (success) {
-        results.imported++;
-        results.details.push({ success: true, username, apiKey: apiKey.substring(0, 20) + '...' });
-      } else {
-        results.failed++;
-        results.details.push({ success: false, username, error: '添加失败（可能已存在）' });
+      if (!apiKey) {
+        parseErrors.push({ error: '缺少 API Key', data: String(account).substring(0, 80) });
+        pushDetail({ error: '缺少 API Key', data: String(account).substring(0, 80) });
+        continue;
       }
 
+      parsedEntries.push({ apiKey: apiKey.trim(), username: username || 'N/A' });
     } catch (error) {
-      results.failed++;
-      results.details.push({ error: error.message, data: JSON.stringify(account).substring(0, 50) });
+      parseErrors.push({ error: error.message, data: JSON.stringify(account).substring(0, 80) });
+      pushDetail({ error: error.message, data: JSON.stringify(account).substring(0, 80) });
+    }
+  }
+
+  if (parsedEntries.length === 0) {
+    return {
+      success: false,
+      imported: 0,
+      failed: accounts.length,
+      total: accounts.length,
+      details
+    };
+  }
+
+  if (isPostgresEnabled(env)) {
+    const pgResult = await pgImportApiAccountEntries(env, parsedEntries);
+
+    if (pgResult.duplicates > 0) {
+      pushDetail({ info: `跳过重复 ${pgResult.duplicates} 条` });
+    }
+
+    return {
+      success: true,
+      imported: pgResult.added,
+      failed: parseErrors.length + (pgResult.skipped || 0),
+      total: accounts.length,
+      duplicates: pgResult.duplicates,
+      skipped: pgResult.skipped,
+      details
+    };
+  }
+
+  const uniqueMap = new Map();
+  let duplicates = 0;
+
+  for (const entry of parsedEntries) {
+    if (uniqueMap.has(entry.apiKey)) {
+      duplicates++;
+      pushDetail({ info: `重复跳过: ${entry.apiKey.substring(0, 20)}...` });
+      continue;
+    }
+    uniqueMap.set(entry.apiKey, entry.username);
+  }
+
+  let imported = 0;
+  let failed = parseErrors.length + duplicates;
+
+  for (const [apiKey, username] of uniqueMap.entries()) {
+    try {
+      const success = await addApiKey(env, apiKey, username);
+      if (success) {
+        imported++;
+        pushDetail({ success: true, username, apiKey: `${apiKey.substring(0, 20)}...` });
+      } else {
+        failed++;
+        pushDetail({ success: false, username, apiKey: `${apiKey.substring(0, 20)}...`, error: '添加失败（已存在或写入失败）' });
+      }
+    } catch (error) {
+      failed++;
+      pushDetail({ error: error.message, apiKey: `${apiKey.substring(0, 20)}...` });
     }
   }
 
   return {
     success: true,
-    imported: results.imported,
-    failed: results.failed,
+    imported,
+    failed,
     total: accounts.length,
-    details: results.details
+    duplicates,
+    details
   };
 }
 
@@ -631,13 +680,48 @@ async function getPublicStats(env) {
       return cached;
     }
 
-    // 全局统计
-    const globalStatsData = await env.API_KEYS.get('global_stats');
-    const globalStats = globalStatsData ? JSON.parse(globalStatsData) : {
+    const usePostgres = isPostgresEnabled(env);
+
+    let globalStats = {
       totalRequests: 0,
       successCount: 0,
-      failureCount: 0
+      failureCount: 0,
+      lastUpdated: null
     };
+
+    if (usePostgres) {
+      const pgStats = await pgGetGlobalStats(env);
+      if (pgStats) {
+        globalStats = {
+          totalRequests: pgStats.totalRequests,
+          successCount: pgStats.successCount,
+          failureCount: pgStats.failureCount,
+          lastUpdated: pgStats.updatedAt
+        };
+      } else {
+        console.warn('Supabase global stats unavailable, falling back to KV');
+      }
+    }
+
+    if (!usePostgres || (globalStats.totalRequests === 0 && globalStats.successCount === 0 && globalStats.failureCount === 0 && !globalStats.lastUpdated)) {
+      const globalStatsData = await env.API_KEYS.get('global_stats');
+      if (globalStatsData) {
+        const kvStats = JSON.parse(globalStatsData);
+        globalStats = {
+          totalRequests: kvStats.totalRequests || 0,
+          successCount: kvStats.successCount || 0,
+          failureCount: kvStats.failureCount || 0,
+          lastUpdated: kvStats.lastUpdated || null
+        };
+      }
+    }
+
+    const totalApiKeys = await countApiKeys(env);
+    const apiKeyList = await listApiKeys(env);
+    const failedKeys = Array.isArray(apiKeyList)
+      ? apiKeyList.filter(item => item.status && item.status !== 'active').length
+      : 0;
+    const activeKeys = Math.max(totalApiKeys - failedKeys, 0);
 
     // 获取所有模型统计
     const modelStatsList = await env.API_KEYS.list({ prefix: 'model_stats:' });
@@ -672,20 +756,37 @@ async function getPublicStats(env) {
     // 获取最近1小时的Top3模型
     const recentTopModels = await getRecentTopModels(env, 1, 3);
 
+    const generatedAt = new Date().toISOString();
+    const storage = usePostgres ? 'postgres+kv' : 'kv';
+    const successRateValue = globalStats.totalRequests > 0
+      ? (globalStats.successCount / globalStats.totalRequests * 100)
+      : 0;
+
     const result = {
       global: {
         totalRequests: globalStats.totalRequests,
         successCount: globalStats.successCount,
         failureCount: globalStats.failureCount,
-        successRate: globalStats.totalRequests > 0
-          ? ((globalStats.successCount / globalStats.totalRequests) * 100).toFixed(2)
-          : '0.00',
-        lastUpdated: globalStats.lastUpdated || new Date().toISOString()
+        successRate: successRateValue.toFixed(2),
+        lastUpdated: globalStats.lastUpdated || generatedAt,
+        totalApiKeys,
+        activeKeys,
+        failedKeys,
+        storage
       },
-      topModels: topModels || [], // Top 10 模型（24小时）
-      recentTopModels: recentTopModels || [], // 最近1小时 Top 3
-      hourlyTrend: hourlyStats || [], // 24小时趋势
-      timestamp: new Date().toISOString()
+      topModels: topModels || [],
+      recentTopModels: recentTopModels || [],
+      hourlyTrend: hourlyStats || [],
+      storage,
+      meta: {
+        totalApiKeys,
+        activeKeys,
+        failedKeys,
+        storage,
+        generatedAt,
+        successRate: successRateValue
+      },
+      timestamp: generatedAt
     };
 
     // 缓存结果
@@ -695,13 +796,18 @@ async function getPublicStats(env) {
   } catch (error) {
     console.error('getPublicStats error:', error);
     // 返回默认数据，避免前端报错
+    const generatedAt = new Date().toISOString();
     return {
       global: {
         totalRequests: 0,
         successCount: 0,
         failureCount: 0,
         successRate: '0.00',
-        lastUpdated: new Date().toISOString()
+        lastUpdated: generatedAt,
+        totalApiKeys: 0,
+        activeKeys: 0,
+        failedKeys: 0,
+        storage: 'kv'
       },
       topModels: [],
       recentTopModels: [],
@@ -714,7 +820,16 @@ async function getPublicStats(env) {
           failure: 0
         };
       }),
-      timestamp: new Date().toISOString()
+      meta: {
+        totalApiKeys: 0,
+        activeKeys: 0,
+        failedKeys: 0,
+        storage: 'kv',
+        generatedAt,
+        successRate: 0
+      },
+      storage: 'kv',
+      timestamp: generatedAt
     };
   }
 }

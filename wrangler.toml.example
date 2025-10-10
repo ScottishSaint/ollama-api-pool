@@ -15,6 +15,16 @@ id = "your-accounts-kv-namespace-id"  # 替换为你的 KV namespace ID
 [vars]
 ADMIN_TOKEN = "your-admin-token-here"  # 管理后台的密钥，建议使用强密码
 ENABLE_ANALYTICS = "true"
+ENABLE_RATE_LIMIT = "false"
+ENABLE_BOT_DETECTION = "true"
+RATE_LIMIT_REQUESTS = "60"
+RATE_LIMIT_WINDOW = "60"
+STATS_SAMPLE_RATE = "0.1"
+MODEL_STATS_SAMPLE_RATE = "0.2"
+REDIS_URL = "rediss://default:password@your-upstash-instance.upstash.io:6379"
+DATABASE_URL = "postgresql://postgres.<project-ref>:password@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+SUPABASE_REST_URL = "https://<project-ref>.supabase.co/rest/v1"
+SUPABASE_SERVICE_ROLE_KEY = "your-supabase-service-role-key"
 
 # 日志配置
 [observability.logs]

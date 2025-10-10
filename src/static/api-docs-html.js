@@ -14,6 +14,24 @@ export const apiDocsHtml = `<!DOCTYPE html>
             overflow-x: auto;
             font-family: 'Courier New', monospace;
         }
+        .copy-btn {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem;
+            color: #f8fafc;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid rgba(226, 232, 240, 0.2);
+            border-radius: 9999px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        .group:hover .copy-btn,
+        .copy-btn:focus {
+            opacity: 1;
+        }
         .response-box {
             max-height: 400px;
             overflow-y: auto;
@@ -192,15 +210,27 @@ export const apiDocsHtml = `<!DOCTYPE html>
             <div class="space-y-4">
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">API Token</label>
-                    <input type="text" id="apiToken" placeholder="请输入您的 API Token"
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <input type="text" id="apiToken" placeholder="请输入您的 API Token"
+                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <div class="flex items-center gap-2">
+                            <button id="saveTokenBtn" class="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400">保存</button>
+                            <button id="clearTokenBtn" class="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300">清空</button>
+                        </div>
+                    </div>
+                    <p id="tokenSavedHint" class="mt-2 text-xs text-gray-500 hidden">Token 已保存，本地仅用于 API 控制台调试。</p>
                 </div>
 
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">模型</label>
-                    <select id="model" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">加载中...</option>
-                    </select>
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <select id="model" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">加载中...</option>
+                        </select>
+                        <button id="copyModelBtn" class="px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300">
+                            复制模型名
+                        </button>
+                    </div>
                     <p class="text-xs text-gray-500 mt-1">模型列表从 /v1/models 接口动态加载</p>
                 </div>
 
@@ -225,6 +255,11 @@ export const apiDocsHtml = `<!DOCTYPE html>
                 <div class="flex items-center">
                     <input type="checkbox" id="stream" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
                     <label for="stream" class="ml-2 text-sm font-semibold text-gray-700">启用流式响应</label>
+                </div>
+
+                <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <button class="template-btn px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-100" data-template="chat-basic">聊天问候</button>
+                    <button class="template-btn px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-100" data-template="translate">翻译助手</button>
                 </div>
 
                 <button onclick="testAPI()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200">
@@ -262,7 +297,9 @@ export const apiDocsHtml = `<!DOCTYPE html>
             <div class="space-y-6">
                 <div>
                     <h3 class="text-lg font-semibold text-gray-700 mb-2">cURL</h3>
-                    <div class="code-block"><pre>curl -X POST https://ollama-api-pool.h7ml.workers.dev/v1/chat/completions \\
+                    <div class="relative group">
+                        <button class="copy-btn" data-copy-target="#code-curl">复制</button>
+                        <div class="code-block" id="code-curl"><pre>curl -X POST https://ollama-api-pool.h7ml.workers.dev/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_TOKEN" \\
   -d '{
@@ -271,11 +308,14 @@ export const apiDocsHtml = `<!DOCTYPE html>
       {"role": "user", "content": "Hello!"}
     ]
   }'</pre></div>
+                    </div>
                 </div>
 
                 <div>
                     <h3 class="text-lg font-semibold text-gray-700 mb-2">Python</h3>
-                    <div class="code-block"><pre>import requests
+                    <div class="relative group">
+                        <button class="copy-btn" data-copy-target="#code-python">复制</button>
+                        <div class="code-block" id="code-python"><pre>import requests
 
 url = "https://ollama-api-pool.h7ml.workers.dev/v1/chat/completions"
 headers = {
@@ -291,11 +331,14 @@ data = {
 
 response = requests.post(url, headers=headers, json=data)
 print(response.json())</pre></div>
+                    </div>
                 </div>
 
                 <div>
                     <h3 class="text-lg font-semibold text-gray-700 mb-2">JavaScript (Fetch)</h3>
-                    <div class="code-block"><pre>const response = await fetch('https://ollama-api-pool.h7ml.workers.dev/v1/chat/completions', {
+                    <div class="relative group">
+                        <button class="copy-btn" data-copy-target="#code-js">复制</button>
+                        <div class="code-block" id="code-js"><pre>const response = await fetch('https://ollama-api-pool.h7ml.workers.dev/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -311,6 +354,7 @@ print(response.json())</pre></div>
 
 const data = await response.json();
 console.log(data);</pre></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -522,5 +566,135 @@ console.log(data);</pre></div>
         }
     </script>
 </body>
+<script>
+  const TOKEN_STORAGE_KEY = 'ollama_api_docs_token';
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const tokenInput = document.getElementById('apiToken');
+    const saveBtn = document.getElementById('saveTokenBtn');
+    const clearBtn = document.getElementById('clearTokenBtn');
+    const hint = document.getElementById('tokenSavedHint');
+    const systemPromptInput = document.getElementById('systemPrompt');
+    const userMessageInput = document.getElementById('userMessage');
+    const temperatureInput = document.getElementById('temperature');
+    const streamCheckbox = document.getElementById('stream');
+    const modelSelect = document.getElementById('model');
+    const copyModelBtn = document.getElementById('copyModelBtn');
+
+    try {
+      const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (savedToken) {
+        tokenInput.value = savedToken;
+        hint.classList.remove('hidden');
+      }
+    } catch (error) {
+      console.warn('读取本地 Token 失败:', error);
+    }
+
+    saveBtn.addEventListener('click', () => {
+      try {
+        const value = tokenInput.value.trim();
+        if (!value) {
+          hint.textContent = '请输入有效的 Token 后再保存。';
+          hint.classList.remove('hidden');
+          return;
+        }
+        localStorage.setItem(TOKEN_STORAGE_KEY, value);
+        hint.textContent = 'Token 已保存，仅存储在本地浏览器。刷新后将自动填充。';
+        hint.classList.remove('hidden');
+      } catch (error) {
+        console.error('保存 Token 失败:', error);
+        hint.textContent = '保存失败，请检查浏览器隐私设置。';
+        hint.classList.remove('hidden');
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      tokenInput.value = '';
+      try {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+      } catch (error) {
+        console.warn('清除 Token 失败:', error);
+      }
+      hint.textContent = 'Token 已清除。';
+      hint.classList.remove('hidden');
+    });
+
+    const templates = {
+      'chat-basic': {
+        systemPrompt: 'You are a helpful assistant.',
+        userMessage: 'Hello, could you introduce yourself?',
+        temperature: 0.7,
+        stream: false
+      },
+      translate: {
+        systemPrompt: 'You are a professional translator.',
+        userMessage: '请把 “云端服务” 翻译成英文，并解释含义。',
+        temperature: 0.3,
+        stream: false
+      },
+    };
+
+    document.querySelectorAll('.template-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-template');
+        const template = templates[key];
+        if (!template) return;
+        systemPromptInput.value = template.systemPrompt;
+        userMessageInput.value = template.userMessage;
+        temperatureInput.value = template.temperature;
+        document.getElementById('tempValue').textContent = template.temperature;
+        streamCheckbox.checked = Boolean(template.stream);
+        showToast('已填充模板：' + btn.textContent.trim(), 'success');
+      });
+    });
+
+    copyModelBtn.addEventListener('click', () => {
+      const value = modelSelect.value;
+      if (!value) {
+        showToast('请先选择模型', 'info');
+        return;
+      }
+      copyText(value);
+    });
+
+    document.querySelectorAll('.copy-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetSelector = btn.getAttribute('data-copy-target');
+        const pre = document.querySelector(targetSelector + ' pre');
+        const text = pre ? pre.innerText : '';
+        if (!text) {
+          showToast('未找到可复制内容', 'error');
+          return;
+        }
+        copyText(text);
+      });
+    });
+
+    function copyText(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('已复制到剪贴板', 'success');
+      }).catch(err => {
+        console.warn('复制失败:', err);
+        showToast('复制失败，请手动选择文本', 'error');
+      });
+    }
+
+    function showToast(message, type) {
+      const toast = document.createElement('div');
+      toast.textContent = message;
+      toast.className = 'fixed top-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm shadow-lg z-50';
+      if (type === 'success') {
+        toast.classList.add('bg-green-500', 'text-white');
+      } else if (type === 'error') {
+        toast.classList.add('bg-red-500', 'text-white');
+      } else {
+        toast.classList.add('bg-gray-700', 'text-white');
+      }
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 2000);
+    }
+  });
+</script>
 </html>
 `;

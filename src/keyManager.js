@@ -3,7 +3,22 @@
  * 负责 API Key 的轮询、失败标记、健康检查
  */
 
-// 生成 API Key 的哈希值（用于 KV Key，避免超过 512 字节限制）
+import {
+  isPostgresEnabled,
+  pgAddApiKey,
+  pgRemoveApiKey,
+  pgImportApiKeys,
+  pgListApiKeys,
+  pgListActiveApiKeys,
+  pgMarkApiKeyFailed,
+  pgEnableApiKey,
+  pgDisableApiKey,
+  pgGetKeyStats,
+  pgListKeyStats,
+  pgCountApiKeys
+} from './postgres';
+
+// 生成 API Key 的哈希值（用于 KV Key，避免超过 512 字节限制，KV 模式专用）
 export async function hashApiKey(apiKey) {
   const encoder = new TextEncoder();
   const data = encoder.encode(apiKey);
@@ -17,6 +32,15 @@ export async function hashApiKey(apiKey) {
  * 直接从所有 Key 中随机选择一个，不检查状态（性能优先）
  */
 export async function getNextApiKey(env) {
+  if (isPostgresEnabled(env)) {
+    const keys = await pgListActiveApiKeys(env);
+    if (!keys || keys.length === 0) {
+      return null;
+    }
+    const randomIndex = Math.floor(Math.random() * keys.length);
+    return keys[randomIndex];
+  }
+
   try {
     const keysData = await env.API_KEYS.get('api_keys_list');
     if (!keysData) {
@@ -39,6 +63,11 @@ export async function getNextApiKey(env) {
 
 // 标记 API Key 失效 (1小时)
 export async function markApiKeyFailed(env, apiKey) {
+  if (isPostgresEnabled(env)) {
+    await pgMarkApiKeyFailed(env, apiKey);
+    return;
+  }
+
   try {
     const keyHash = await hashApiKey(apiKey);
     await env.API_KEYS.put(`failed:${keyHash}`, '1', {
@@ -51,6 +80,10 @@ export async function markApiKeyFailed(env, apiKey) {
 
 // 添加 API Key
 export async function addApiKey(env, apiKey, username = null, ttl = null) {
+  if (isPostgresEnabled(env)) {
+    return await pgAddApiKey(env, apiKey, username, ttl);
+  }
+
   const keysData = await env.API_KEYS.get('api_keys_list');
   const keys = keysData ? JSON.parse(keysData) : [];
 
@@ -80,6 +113,10 @@ export async function addApiKey(env, apiKey, username = null, ttl = null) {
 
 //删除 API Key
 export async function removeApiKey(env, apiKey) {
+  if (isPostgresEnabled(env)) {
+    return await pgRemoveApiKey(env, apiKey);
+  }
+
   const keysData = await env.API_KEYS.get('api_keys_list');
   if (!keysData) return false;
 
@@ -103,6 +140,10 @@ export async function removeApiKey(env, apiKey) {
 
 // 获取所有 API Key 列表（优化版：批量并行查询）
 export async function listApiKeys(env) {
+  if (isPostgresEnabled(env)) {
+    return await pgListApiKeys(env);
+  }
+
   const keysData = await env.API_KEYS.get('api_keys_list');
   if (!keysData) return [];
 
@@ -152,6 +193,10 @@ export async function listApiKeys(env) {
 
 // 批量导入 API Keys
 export async function importApiKeys(env, keys) {
+  if (isPostgresEnabled(env)) {
+    return await pgImportApiKeys(env, keys);
+  }
+
   const keysData = await env.API_KEYS.get('api_keys_list');
   const existingKeys = keysData ? JSON.parse(keysData) : [];
 
@@ -167,6 +212,10 @@ export async function importApiKeys(env, keys) {
 
 // 获取 API Key 统计信息
 export async function getKeyStats(env, apiKey) {
+  if (isPostgresEnabled(env)) {
+    return await pgGetKeyStats(env, apiKey);
+  }
+
   const keyHash = await hashApiKey(apiKey);
   const statsKey = `key_stats:${keyHash}`;
   const statsData = await env.API_KEYS.get(statsKey);
@@ -197,6 +246,10 @@ export async function getKeyStats(env, apiKey) {
 
 // 获取所有 API Key 的统计信息
 export async function getAllKeyStats(env) {
+  if (isPostgresEnabled(env)) {
+    return await pgListKeyStats(env);
+  }
+
   const keysData = await env.API_KEYS.get('api_keys_list');
   if (!keysData) return [];
 
@@ -206,8 +259,25 @@ export async function getAllKeyStats(env) {
   return await Promise.all(statsPromises);
 }
 
+export async function countApiKeys(env) {
+  if (isPostgresEnabled(env)) {
+    return await pgCountApiKeys(env);
+  }
+
+  const keysData = await env.API_KEYS.get('api_keys_list');
+  if (!keysData) return 0;
+
+  const keys = JSON.parse(keysData);
+  return Array.isArray(keys) ? keys.length : 0;
+}
+
 // 手动禁用 API Key
 export async function disableApiKey(env, apiKey, duration = 3600) {
+  if (isPostgresEnabled(env)) {
+    await pgDisableApiKey(env, apiKey, duration);
+    return;
+  }
+
   const keyHash = await hashApiKey(apiKey);
   await env.API_KEYS.put(`disabled:${keyHash}`, 'manual', {
     expirationTtl: duration
@@ -216,6 +286,11 @@ export async function disableApiKey(env, apiKey, duration = 3600) {
 
 // 手动启用 API Key
 export async function enableApiKey(env, apiKey) {
+  if (isPostgresEnabled(env)) {
+    await pgEnableApiKey(env, apiKey);
+    return;
+  }
+
   const keyHash = await hashApiKey(apiKey);
   await env.API_KEYS.delete(`disabled:${keyHash}`);
   await env.API_KEYS.delete(`failed:${keyHash}`);

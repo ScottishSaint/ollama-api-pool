@@ -4,9 +4,31 @@
  */
 
 import { errorResponse, jsonResponse } from './utils';
+import {
+  isPostgresEnabled,
+  pgCreateClientToken,
+  pgGetClientToken,
+  pgListClientTokens,
+  pgDeleteClientToken,
+  pgIncrementClientTokenUsage
+} from './postgres';
 
 // 验证客户端 Token
 export async function verifyClientToken(token, env) {
+  if (isPostgresEnabled(env)) {
+    const data = await pgGetClientToken(env, token);
+    if (!data) {
+      return false;
+    }
+
+    if (data.expires_at && Date.now() > new Date(data.expires_at).getTime()) {
+      return false;
+    }
+
+    await pgIncrementClientTokenUsage(env, token);
+    return true;
+  }
+
   const tokenData = await env.API_KEYS.get(`client_token:${token}`);
   if (!tokenData) {
     return false;
@@ -23,6 +45,26 @@ export async function verifyClientToken(token, env) {
 
 // 创建客户端 Token
 export async function createClientToken(env, name, ttl = null) {
+  if (isPostgresEnabled(env)) {
+    const token = generateToken();
+    const now = new Date();
+    const expiresAt = ttl ? new Date(now.getTime() + ttl * 1000) : null;
+
+    await pgCreateClientToken(env, {
+      token,
+      name,
+      createdAt: now.toISOString(),
+      expiresAt: expiresAt ? expiresAt.toISOString() : null,
+      requestCount: 0
+    });
+
+    return {
+      token,
+      name,
+      expiresAt: expiresAt ? expiresAt.toISOString() : null
+    };
+  }
+
   const token = generateToken();
   const expiresAt = ttl ? Date.now() + (ttl * 1000) : null;
 
@@ -45,6 +87,17 @@ export async function createClientToken(env, name, ttl = null) {
 
 // 列出所有客户端 Token
 export async function listClientTokens(env) {
+  if (isPostgresEnabled(env)) {
+    const rows = await pgListClientTokens(env);
+    return rows.map(row => ({
+      token: row.token,
+      name: row.name,
+      createdAt: row.createdAt,
+      expires_at: row.expires_at,
+      requestCount: row.requestCount || 0
+    }));
+  }
+
   const list = await env.API_KEYS.list({ prefix: 'client_token:' });
   const tokens = [];
 
@@ -67,6 +120,11 @@ export async function listClientTokens(env) {
 
 // 删除客户端 Token
 export async function deleteClientToken(env, token) {
+  if (isPostgresEnabled(env)) {
+    await pgDeleteClientToken(env, token);
+    return true;
+  }
+
   await env.API_KEYS.delete(`client_token:${token}`);
   return true;
 }

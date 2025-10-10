@@ -1,0 +1,51 @@
+{
+  "timestamp": "2025-10-10 22:32 UTC+8",
+  "executor": "Codex",
+  "project_overview": {
+    "name": "ollama-api-pool",
+    "type": "Cloudflare Worker",
+    "goal": "提供兼容 OpenAI 协议的 Ollama API 代理池，支持多账号轮询与管理"
+  },
+  "tech_stack": {
+    "language": "JavaScript (ES Modules)",
+    "runtime": "Cloudflare Workers",
+    "package_manager": "pnpm",
+    "dependencies": [
+      "wrangler"
+    ],
+    "storage": [
+      "Cloudflare KV (API_KEYS, ACCOUNTS)"
+    ]
+  },
+  "main_modules": [
+    "src/index.js: Worker 路由入口与健康检查",
+    "src/proxy.js: 请求代理、缓存、统计与速率限制",
+    "src/keyManager.js: API Key 增删查、失败标记、健康检查",
+    "src/cache.js: 使用 KV 的多类缓存封装",
+    "src/admin.js: 管理后台 API",
+    "src/auth.js: 客户端 Token 管理与验证"
+  ],
+  "configuration": {
+    "wrangler": "wrangler.toml / wrangler.toml.example",
+    "environment_variables": [
+      "ADMIN_TOKEN",
+      "ENABLE_BOT_DETECTION",
+      "ENABLE_RATE_LIMIT",
+      "RATE_LIMIT_REQUESTS",
+      "RATE_LIMIT_WINDOW",
+      "ENABLE_ANALYTICS",
+      "STATS_SAMPLE_RATE",
+      "MODEL_STATS_SAMPLE_RATE"
+    ]
+  },
+  "initial_observations": [
+    "缓存与限流均依赖 Cloudflare KV，存在单点性能瓶颈",
+    "API Key 轮询策略当前为随机选择，未考虑失败状态与权重",
+    "统计信息写入频率较高，可能导致 KV 成本提升",
+    "暂无外部缓存或限流服务集成，REDIS_URL 可作为扩展入口"
+  ],
+  "next_focus": [
+    "评估使用 Redis 进行缓存与速率限制的可行性",
+    "识别 API Key 管理与代理流程的优化机会"
+  ]
+}

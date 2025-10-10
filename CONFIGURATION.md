@@ -223,6 +223,102 @@ MODEL_STATS_SAMPLE_RATE = "1.0"
 
 ---
 
+### 7. Redis 缓存与限流（可选）
+
+> 更新时间：2025-10-10 22:45 (UTC+8) — Codex
+
+```toml
+REDIS_URL = "rediss://default:<密码>@<子域>.upstash.io:6379"
+```
+
+**作用**：
+- 启用后，代理缓存与速率限制优先使用 Upstash Redis，KV 作为回退通道；
+- 速率限制通过 `INCR + EXPIRE` 提供秒级窗口计数；
+- 缓存命中率提升后可显著减少 KV 的读写压力。
+
+**配置步骤**：
+1. 登录 Upstash 控制台，复制数据库的 **TLS Redis URL**（即 `rediss://...`）；
+2. 将完整连接串填入 `wrangler.toml` 的 `[vars]` 中；
+3. 重新部署 Worker，确保环境变量生效。
+
+**实现细节**：
+- Worker 内部会解析 `REDIS_URL`，使用 Upstash REST API（HTTPS + Bearer Token）发送命令；
+- 缓存键以 `cache:*` 前缀写入 Redis，并设置与 KV 相同的 TTL；
+- 速率限制键以 `ratelimit:*` 前缀存储，窗口结束后自动过期；
+- 当 Redis 不可用时自动回退到 Cloudflare KV，确保功能连续性。
+
+**注意事项**：
+- Upstash REST API 返回 JSON，Worker 无需额外依赖即可调用；
+- 如果使用自建 Redis，请提供兼容 Upstash REST 的 HTTPS 接口；
+- 建议在 Upstash 控制台监控请求量和数据存储，避免超出免费配额。
+
+---
+
+### 8. PostgreSQL（Supabase）集成（推荐）
+
+> 更新时间：2025-10-10 22:46 (UTC+8) — Codex
+
+```toml
+DATABASE_URL = "postgresql://postgres.<project-ref>:<密码>@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+SUPABASE_REST_URL = "https://<project-ref>.supabase.co/rest/v1"
+SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJI..."  # Supabase Service Role Key
+```
+
+**作用**：
+- 将 API Key、统计、客户端 Token 等高频写入数据迁移至 PostgreSQL，KV 仅作为兜底；
+- 支持十万级 Key 导入与频繁状态更新，不再受 KV 写入 1000 次/天限制；
+- 与 Redis 组合后可实现高吞吐 + 强一致的缓存/数据库架构。
+
+**表命名要求**：所有自建数据表需以 `ollama_api_` 开头，默认使用以下结构：
+
+```sql
+create table if not exists ollama_api_keys (
+  api_key text primary key,
+  username text,
+  status text default 'active',
+  created_at timestamptz default now(),
+  expires_at timestamptz,
+  failed_until timestamptz,
+  disabled_until timestamptz,
+  consecutive_failures integer default 0
+);
+
+create table if not exists ollama_api_key_stats (
+  api_key text primary key references ollama_api_keys(api_key) on delete cascade,
+  total_requests bigint default 0,
+  success_count bigint default 0,
+  failure_count bigint default 0,
+  success_rate numeric default 0,
+  last_used timestamptz,
+  last_success timestamptz,
+  last_failure timestamptz,
+  consecutive_failures integer default 0,
+  created_at timestamptz default now()
+);
+
+create table if not exists ollama_api_client_tokens (
+  token text primary key,
+  name text,
+  created_at timestamptz default now(),
+  expires_at timestamptz,
+  request_count bigint default 0
+);
+```
+
+**配置步骤**：
+1. 在 Supabase 控制台启用数据库，并执行上述建表 SQL（或使用迁移工具执行）；
+2. 在 “Project Settings → API” 中获取 `Service Role Key`；
+3. 将 `DATABASE_URL`、`SUPABASE_REST_URL`、`SUPABASE_SERVICE_ROLE_KEY` 写入 `wrangler.toml`；
+4. 部署 Worker，确认管理后台 `/admin/stats` 显示 `storage = postgres+kv`；
+5. 如需扩展更多字段，可在表中增加列，Worker 会自动映射。
+
+**注意事项**：
+- `SUPABASE_SERVICE_ROLE_KEY` 属于高敏感凭据，必须通过环境变量注入，勿提交到仓库；
+- 若未设置 `SUPABASE_REST_URL`，Worker 会尝试从 `DATABASE_URL` 推断 `https://<project-ref>.supabase.co/rest/v1`，但显式配置更可靠；
+- 推荐与 `REDIS_URL` 搭配使用，实现“Postgres 主存储 + Redis 热缓存 + KV 备份”的三层架构。
+
+---
+
 ## 推荐配置方案
 
 ### 方案 A：免费计划 + 极度节省（默认）

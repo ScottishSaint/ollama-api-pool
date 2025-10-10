@@ -1,543 +1,558 @@
 /**
- * 公开统计页面 HTML
+ * 公开统计页面 HTML（极简版）
  */
 
 export const statsHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>实时统计 - Ollama API Pool</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(to bottom, #f9fafb 0%, #ffffff 100%);
-        }
-        .gradient-bg {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
-        }
-        .card {
-            animation: fadeUp 0.6s ease-out;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-        .card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-        }
-        @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .stat-card {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.2);
-            box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);
-        }
-        .pulse {
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: .5; }
-        }
-        .chart-container {
-            position: relative;
-            height: 280px;
-            width: 100%;
-        }
-        table {
-            border-collapse: separate;
-            border-spacing: 0;
-        }
-        tbody tr {
-            transition: all 0.2s ease;
-        }
-        tbody tr:hover {
-            background: linear-gradient(90deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
-            transform: scale(1.01);
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>实时统计 - Ollama API Pool</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f7fb;
+      color: #1f2937;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 12px;
+      box-shadow: 0 8px 16px rgba(15, 23, 42, 0.04);
+      transition: box-shadow 0.2s ease, transform 0.2s ease;
+    }
+    .card:hover {
+      box-shadow: 0 12px 20px rgba(15, 23, 42, 0.08);
+      transform: translateY(-1px);
+    }
+    .metric-card {
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.9), #ffffff);
+      padding: 18px 20px;
+    }
+    .skeleton {
+      border-radius: 12px;
+      background: linear-gradient(90deg, rgba(226, 232, 240, 0.2) 25%, rgba(226, 232, 240, 0.4) 37%, rgba(226, 232, 240, 0.2) 63%);
+      background-size: 400% 100%;
+      animation: shimmer 1.4s ease infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    .empty-state {
+      border: 1px dashed rgba(148, 163, 184, 0.5);
+      border-radius: 10px;
+      padding: 32px 16px;
+      text-align: center;
+      background: rgba(248, 250, 252, 0.8);
+      color: #64748b;
+      font-size: 0.9rem;
+    }
+  </style>
 </head>
-<body class="bg-gray-50">
-    <!-- Header -->
-    <div class="gradient-bg text-white sticky top-0 z-50">
-        <div class="container mx-auto px-4 sm:px-6 py-8 sm:py-12">
-            <div class="flex flex-col md:flex-row items-center justify-between gap-4">
-                <div class="text-center md:text-left">
-                    <h1 class="text-3xl sm:text-4xl font-bold mb-2">📊 实时统计仪表盘</h1>
-                    <p class="text-base sm:text-lg text-white/80">Ollama API Pool - 模型使用分析与趋势</p>
-                </div>
-                <div class="flex gap-2 sm:gap-3 flex-wrap justify-center">
-                    <a href="/" class="px-4 sm:px-6 py-2 sm:py-3 bg-white/20 hover:bg-white/30 rounded-xl font-medium transition-all backdrop-blur-sm text-sm sm:text-base">
-                        🏠 管理后台
-                    </a>
-                    <a href="/api-docs" class="px-4 sm:px-6 py-2 sm:py-3 bg-white/20 hover:bg-white/30 rounded-xl font-medium transition-all backdrop-blur-sm text-sm sm:text-base">
-                        📚 API 文档
-                    </a>
-                </div>
-            </div>
+<body>
+  <div class="min-h-screen flex flex-col">
+    <header class="bg-white border-b border-slate-200">
+      <div class="max-w-6xl mx-auto px-6 py-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+        <div>
+          <h1 class="flex items-center gap-3 text-3xl font-semibold text-slate-900">
+            <span>实时监控中心</span>
+            <span id="storage-pill" class="hidden px-3 py-1 text-xs font-semibold rounded-full bg-slate-900 text-white"></span>
+          </h1>
+          <p class="mt-2 text-sm text-slate-500">
+            追踪 Ollama API Pool 的请求趋势、模型使用表现与关键资源状态。
+          </p>
         </div>
-    </div>
+        <div class="flex flex-wrap gap-3">
+          <button id="refresh-btn" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-900 rounded-full hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900">
+            🔄 手动刷新
+          </button>
+          <a href="/" class="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-full hover:bg-slate-50">管理后台</a>
+          <a href="/api-docs" class="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-full hover:bg-slate-50">API 文档</a>
+        </div>
+      </div>
+    </header>
 
-    <div class="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <!-- 全局统计卡片 -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
-            <div class="stat-card rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs sm:text-sm font-medium opacity-80">总请求数</span>
-                    <span class="text-xl sm:text-2xl">📈</span>
-                </div>
-                <p id="total-requests" class="text-2xl sm:text-4xl font-bold">-</p>
-                <p class="text-xs sm:text-sm opacity-70 mt-1 sm:mt-2">Total Requests</p>
-            </div>
-            <div class="stat-card rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs sm:text-sm font-medium opacity-80">成功率</span>
-                    <span class="text-xl sm:text-2xl">✅</span>
-                </div>
-                <p id="success-rate" class="text-2xl sm:text-4xl font-bold">-</p>
-                <p class="text-xs sm:text-sm opacity-70 mt-1 sm:mt-2">Success Rate</p>
-            </div>
-            <div class="stat-card rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs sm:text-sm font-medium opacity-80">成功次数</span>
-                    <span class="text-xl sm:text-2xl">🎯</span>
-                </div>
-                <p id="success-count" class="text-2xl sm:text-4xl font-bold">-</p>
-                <p class="text-xs sm:text-sm opacity-70 mt-1 sm:mt-2">Success Count</p>
-            </div>
-            <div class="stat-card rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs sm:text-sm font-medium opacity-80">失败次数</span>
-                    <span class="text-xl sm:text-2xl">⚠️</span>
-                </div>
-                <p id="failure-count" class="text-2xl sm:text-4xl font-bold">-</p>
-                <p class="text-xs sm:text-sm opacity-70 mt-1 sm:mt-2">Failure Count</p>
-            </div>
+    <main class="flex-1">
+      <div class="max-w-6xl mx-auto px-6 py-8 space-y-8">
+        <!-- Skeleton -->
+        <div id="skeleton-loader" class="space-y-6">
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="h-28 skeleton"></div>
+            <div class="h-28 skeleton"></div>
+            <div class="h-28 skeleton"></div>
+            <div class="h-28 skeleton"></div>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="h-72 skeleton"></div>
+            <div class="h-72 skeleton"></div>
+          </div>
+          <div class="h-52 skeleton"></div>
         </div>
 
-        <!-- 图表区域 -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
-            <!-- 24小时趋势图 -->
-            <div class="card bg-white rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6">
-                <h2 class="text-lg sm:text-xl font-bold text-gray-800 mb-3 sm:mb-4 flex items-center gap-2">
-                    <span>📊</span>
-                    <span>24小时请求趋势</span>
-                </h2>
-                <div class="chart-container">
-                    <canvas id="hourly-trend-chart"></canvas>
+        <!-- Dashboard -->
+        <div id="dashboard-content" class="hidden space-y-8">
+          <section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <article class="metric-card">
+              <p class="text-xs uppercase tracking-wide text-slate-400">总请求数</p>
+              <p id="metric-total-requests" class="mt-3 text-3xl font-semibold text-slate-900">--</p>
+            </article>
+            <article class="metric-card">
+              <p class="text-xs uppercase tracking-wide text-slate-400">成功率</p>
+              <p id="metric-success-rate" class="mt-3 text-3xl font-semibold text-slate-900">--</p>
+            </article>
+            <article class="metric-card">
+              <p class="text-xs uppercase tracking-wide text-slate-400">成功次数</p>
+              <p id="metric-success-count" class="mt-3 text-3xl font-semibold text-slate-900">--</p>
+            </article>
+            <article class="metric-card">
+              <p class="text-xs uppercase tracking-wide text-slate-400">失败次数</p>
+              <p id="metric-failure-count" class="mt-3 text-3xl font-semibold text-slate-900">--</p>
+            </article>
+          </section>
+
+          <div id="no-data-banner" class="card p-4 text-sm text-slate-500 flex items-center gap-3 hidden">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 text-slate-500">ℹ️</span>
+            <span>尚未采集到新的统计数据。发起一次 API 请求后，点击「手动刷新」即可查看最新指标。</span>
+          </div>
+
+          <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <article class="card p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm text-slate-500">API Key 总数</p>
+                  <p class="mt-2 text-2xl font-semibold text-slate-900">
+                    <span id="metric-total-keys">--</span>
+                  </p>
+                  <p class="mt-1 text-xs text-slate-400">活跃率：<span id="metric-active-percentage" class="text-slate-600 font-medium">--</span></p>
                 </div>
-            </div>
-
-            <!-- Top 10 模型饼图 -->
-            <div class="card bg-white rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6">
-                <h2 class="text-lg sm:text-xl font-bold text-gray-800 mb-3 sm:mb-4 flex items-center gap-2">
-                    <span>🏆</span>
-                    <span>Top 10 热门模型</span>
-                </h2>
-                <div class="chart-container">
-                    <canvas id="top-models-chart"></canvas>
+                <div class="text-right text-xs text-slate-400">
+                  <p>活跃：<span id="metric-active-keys" class="text-slate-600 font-medium">--</span></p>
+                  <p class="mt-1">禁用/失败：<span id="metric-failed-keys" class="text-slate-600 font-medium">--</span></p>
                 </div>
-            </div>
-        </div>
+              </div>
+              <div class="mt-4 h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div id="active-progress-bar" class="h-2 bg-slate-900 transition-all duration-500" style="width:0%;"></div>
+              </div>
+              <div class="mt-4 flex items-center gap-3 text-xs text-slate-400">
+                <span id="metric-storage" class="px-3 py-1 rounded-full border border-slate-200 text-slate-500">--</span>
+                <span>最近同步：<span id="metric-sync-time" class="text-slate-600 font-medium">--</span></span>
+              </div>
+            </article>
 
-        <!-- 最近1小时 Top 3 -->
-        <div class="card bg-white rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6 mb-6 sm:mb-8">
-            <h2 class="text-lg sm:text-xl font-bold text-gray-800 mb-4 sm:mb-6 flex items-center gap-2 flex-wrap">
-                <span>🔥</span>
-                <span>最近1小时热门模型 TOP 3</span>
-                <span class="pulse ml-2 px-2 sm:px-3 py-1 bg-red-500 text-white text-xs rounded-full">LIVE</span>
-            </h2>
-            <div id="recent-top-models" class="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-6">
-                <!-- 动态加载 -->
-            </div>
-        </div>
+            <article class="card p-6">
+              <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-slate-900">最近 1 小时热门模型</h2>
+                <span class="text-xs text-slate-400 border border-slate-200 rounded-full px-3 py-1">Top 3</span>
+              </div>
+              <div id="recent-top-models" class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm"></div>
+              <div id="recent-top-models-empty" class="mt-6 empty-state hidden">
+                暂无近一小时数据
+              </div>
+            </article>
+          </section>
 
-        <!-- Top 10 模型列表 -->
-        <div class="card bg-white rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6 mb-6">
-            <h2 class="text-lg sm:text-xl font-bold text-gray-800 mb-4 sm:mb-6 flex items-center gap-2">
-                <span>📋</span>
-                <span>Top 10 模型详细统计</span>
-            </h2>
-            <div class="overflow-x-auto -mx-4 sm:mx-0">
-                <table class="w-full min-w-[600px]">
-                    <thead class="bg-gradient-to-r from-indigo-50 to-purple-50 border-b-2 border-indigo-200">
-                        <tr>
-                            <th class="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-gray-700">排名</th>
-                            <th class="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-gray-700">模型名称</th>
-                            <th class="px-3 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm font-semibold text-gray-700">总请求</th>
-                            <th class="px-3 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm font-semibold text-gray-700">成功</th>
-                            <th class="px-3 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm font-semibold text-gray-700">失败</th>
-                            <th class="px-3 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm font-semibold text-gray-700">成功率</th>
-                        </tr>
-                    </thead>
-                    <tbody id="top-models-table" class="divide-y divide-gray-200">
-                        <!-- 动态加载 -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
+          <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <article class="card p-6">
+              <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-slate-900">请求趋势（24 小时）</h2>
+                <span id="trend-empty-badge" class="hidden text-xs text-slate-400">暂无数据</span>
+              </div>
+              <div class="mt-4" style="height:300px">
+                <canvas id="hourly-trend-chart"></canvas>
+              </div>
+            </article>
 
-        <!-- 自动刷新提示 -->
-        <div class="text-center text-xs sm:text-sm text-gray-500 py-4">
-            <p class="flex items-center justify-center gap-2">
-                <span>📡</span>
-                <span>数据每 30 秒自动刷新</span>
-                <span>·</span>
-                <span>最后更新: <span id="last-update" class="font-medium text-indigo-600">-</span></span>
-            </p>
-        </div>
-    </div>
+            <article class="card p-6">
+              <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-slate-900">热门模型占比</h2>
+                <span id="top-models-empty" class="hidden text-xs text-slate-400">暂无数据</span>
+              </div>
+              <div class="mt-4" style="height:300px" id="top-models-echart"></div>
+            </article>
+          </section>
 
-    <!-- Footer -->
-    <footer class="bg-white border-t border-gray-200 py-6 mt-8">
-        <div class="container mx-auto px-4 sm:px-6">
-            <div class="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs sm:text-sm text-gray-600">
-                <div class="flex items-center gap-2">
-                    <span>Ollama API Pool</span>
-                    <span class="text-gray-400">·</span>
-                    <a href="https://github.com/dext7r/ollama-api-pool" target="_blank" class="hover:text-indigo-600 transition-colors">
-                        GitHub
-                    </a>
-                </div>
-                <div class="text-gray-500">
-                    Made with ❤️ by dext7r
-                </div>
+          <section class="card p-6">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-lg font-semibold text-slate-900">Top 10 模型详细数据</h2>
+              <span class="text-xs text-slate-400">采样统计</span>
             </div>
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-sm text-slate-600">
+                <thead class="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th class="py-3 pr-4 text-left">排名</th>
+                    <th class="py-3 pr-4 text-left">模型名称</th>
+                    <th class="py-3 pr-4 text-center">总请求</th>
+                    <th class="py-3 pr-4 text-center">成功</th>
+                    <th class="py-3 pr-4 text-center">失败</th>
+                    <th class="py-3 pr-4 text-center">成功率</th>
+                  </tr>
+                </thead>
+                <tbody id="top-models-table">
+                  <tr><td colspan="6" class="py-6 text-center text-slate-400">加载中...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <p class="text-xs text-slate-400 text-center">
+            自动刷新频率：30 秒 · 最后更新：<span id="footer-last-update" class="text-slate-600 font-medium">--</span>
+          </p>
         </div>
+      </div>
+    </main>
+
+    <footer class="bg-white border-t border-slate-200">
+      <div class="max-w-6xl mx-auto px-6 py-6 text-xs text-slate-400 flex flex-col sm:flex-row justify-between gap-2">
+        <span>© ${new Date().getFullYear()} Ollama API Pool</span>
+        <span>Made with ❤️ by dext7r</span>
+      </div>
     </footer>
+  </div>
 
-    <script>
-        let hourlyChart = null;
-        let topModelsChart = null;
+  <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 space-y-2 z-50"></div>
 
-        // 加载统计数据
-        async function loadStats() {
-            try {
-                const response = await fetch('/admin/public-stats');
+  <script>
+    const REFRESH_INTERVAL = 30000;
+    const state = {
+      trendChart: null,
+      modelsChart: null,
+      timer: null,
+      loaded: false
+    };
 
-                if (!response.ok) {
-                    throw new Error(\`HTTP \${response.status}: \${response.statusText}\`);
-                }
+    const numberFormatter = new Intl.NumberFormat('zh-CN');
+    const percentFormatter = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    const text = await response.text();
-                    throw new Error('响应不是 JSON 格式: ' + text.substring(0, 100));
-                }
+    function toggleSkeleton(show) {
+      if (show) {
+        $('#skeleton-loader').removeClass('hidden');
+        $('#dashboard-content').addClass('hidden');
+      } else {
+        $('#skeleton-loader').addClass('hidden');
+        $('#dashboard-content').removeClass('hidden');
+      }
+    }
 
-                const data = await response.json();
+    function showToast(message, type = 'info') {
+      const id = 'toast-' + Date.now();
+      const baseClass = type === 'success'
+        ? 'bg-emerald-500 text-white'
+        : type === 'error'
+          ? 'bg-red-500 text-white'
+          : 'bg-slate-900 text-white';
+      const toast = $(\`
+        <div id="\${id}" class="\${baseClass} px-4 py-2 text-sm font-medium rounded-full shadow-lg">
+          \${message}
+        </div>
+      \`);
+      $('#toast-container').append(toast);
+      setTimeout(() => toast.fadeOut(300, () => toast.remove()), 2200);
+    }
 
-                // 更新全局统计卡片
-                document.getElementById('total-requests').textContent = data.global.totalRequests.toLocaleString();
-                document.getElementById('success-rate').textContent = data.global.successRate + '%';
-                document.getElementById('success-count').textContent = data.global.successCount.toLocaleString();
-                document.getElementById('failure-count').textContent = data.global.failureCount.toLocaleString();
-                document.getElementById('last-update').textContent = new Date(data.timestamp).toLocaleString('zh-CN');
+    function formatNumber(value) {
+      if (value === undefined || value === null) return '--';
+      return numberFormatter.format(value);
+    }
 
-                // 更新24小时趋势图
-                updateHourlyTrendChart(data.hourlyTrend);
+    function formatPercentValue(value) {
+      if (value === undefined || value === null || Number.isNaN(value)) return '--';
+      return percentFormatter.format(value) + '%';
+    }
 
-                // 更新Top 10模型饼图
-                updateTopModelsChart(data.topModels);
-
-                // 更新最近1小时Top 3
-                updateRecentTopModels(data.recentTopModels);
-
-                // 更新Top 10模型表格
-                updateTopModelsTable(data.topModels);
-
-            } catch (error) {
-                console.error('加载统计数据失败:', error);
-                // 显示错误信息给用户
-                const errorMsg = document.createElement('div');
-                errorMsg.className = 'fixed top-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
-                errorMsg.textContent = '加载统计数据失败: ' + error.message;
-                document.body.appendChild(errorMsg);
-                setTimeout(() => errorMsg.remove(), 5000);
-            }
+    async function fetchStats(forceSkeleton = false) {
+      try {
+        if (!state.loaded || forceSkeleton) {
+          toggleSkeleton(true);
         }
 
-        // 更新24小时趋势图
-        function updateHourlyTrendChart(data) {
-            const ctx = document.getElementById('hourly-trend-chart');
-
-            if (hourlyChart) {
-                hourlyChart.destroy();
-            }
-
-            hourlyChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: data.map(d => d.hour),
-                    datasets: [
-                        {
-                            label: '总请求',
-                            data: data.map(d => d.requests),
-                            borderColor: 'rgb(99, 102, 241)',
-                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                            tension: 0.4,
-                            fill: true,
-                            borderWidth: 2,
-                            pointRadius: 3,
-                            pointHoverRadius: 5
-                        },
-                        {
-                            label: '成功',
-                            data: data.map(d => d.success),
-                            borderColor: 'rgb(34, 197, 94)',
-                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                            tension: 0.4,
-                            fill: true,
-                            borderWidth: 2,
-                            pointRadius: 3,
-                            pointHoverRadius: 5
-                        },
-                        {
-                            label: '失败',
-                            data: data.map(d => d.failure),
-                            borderColor: 'rgb(239, 68, 68)',
-                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                            tension: 0.4,
-                            fill: true,
-                            borderWidth: 2,
-                            pointRadius: 3,
-                            pointHoverRadius: 5
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'top',
-                            labels: {
-                                padding: 15,
-                                usePointStyle: true,
-                                font: {
-                                    size: 12,
-                                    weight: 500
-                                }
-                            }
-                        },
-                        tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                            padding: 12,
-                            titleFont: { size: 13, weight: 'bold' },
-                            bodyFont: { size: 12 },
-                            cornerRadius: 8
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                font: { size: 11 }
-                            },
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.05)'
-                            }
-                        },
-                        x: {
-                            ticks: {
-                                font: { size: 11 }
-                            },
-                            grid: {
-                                display: false
-                            }
-                        }
-                    },
-                    interaction: {
-                        intersect: false,
-                        mode: 'index'
-                    }
-                }
-            });
+        const response = await fetch('/admin/public-stats', { headers: { 'Cache-Control': 'no-store' } });
+        if (!response.ok) {
+          throw new Error('HTTP ' + response.status);
         }
 
-        // 更新Top 10模型饼图
-        function updateTopModelsChart(data) {
-            const ctx = document.getElementById('top-models-chart');
+        const data = await response.json();
+        renderDashboard(data);
+        state.loaded = true;
+      } catch (error) {
+        console.error('统计数据加载失败:', error);
+        showToast('统计数据加载失败', 'error');
+      } finally {
+        toggleSkeleton(false);
+      }
+    }
 
-            if (topModelsChart) {
-                topModelsChart.destroy();
+    function renderDashboard(data) {
+      if (!data || !data.global) return;
+
+      const global = data.global;
+      const meta = data.meta || {};
+      const storage = meta.storage || global.storage || 'kv';
+      const successRateValue = parseFloat(meta.successRate ?? global.successRate ?? 0);
+
+      $('#metric-total-requests').text(formatNumber(global.totalRequests || 0));
+      $('#metric-success-rate').text(formatPercentValue(successRateValue));
+      $('#metric-success-count').text(formatNumber(global.successCount || 0));
+      $('#metric-failure-count').text(formatNumber(global.failureCount || 0));
+
+      const totalKeys = meta.totalApiKeys ?? global.totalApiKeys ?? 0;
+      const activeKeys = meta.activeKeys ?? global.activeKeys ?? 0;
+      const failedKeys = meta.failedKeys ?? global.failedKeys ?? 0;
+      const activePercent = totalKeys > 0 ? Math.min(activeKeys / totalKeys * 100, 100) : 0;
+
+      $('#metric-total-keys').text(formatNumber(totalKeys));
+      $('#metric-active-keys').text(formatNumber(activeKeys));
+      $('#metric-failed-keys').text(formatNumber(failedKeys));
+      $('#metric-active-percentage').text(formatPercentValue(activePercent));
+      $('#active-progress-bar').css('width', \`\${activePercent.toFixed(1)}%\`);
+      $('#metric-storage').text('存储后端：' + storage.toUpperCase());
+      $('#storage-pill').removeClass('hidden').text(storage.toUpperCase());
+
+      const timestamp = meta.generatedAt || data.timestamp;
+      const formattedTime = timestamp ? new Date(timestamp).toLocaleString('zh-CN') : '--';
+      $('#metric-sync-time').text(formattedTime);
+      $('#footer-last-update').text(formattedTime);
+
+      const hasData = (global.totalRequests || 0) > 0 || (global.successCount || 0) > 0 || (global.failureCount || 0) > 0;
+      $('#no-data-banner').toggleClass('hidden', hasData);
+
+      updateTrendChart(data.hourlyTrend || []);
+      updateModelsChart(data.topModels || []);
+      updateRecentModels(data.recentTopModels || []);
+      updateModelsTable(data.topModels || []);
+    }
+
+    function updateTrendChart(trend) {
+      const ctx = document.getElementById('hourly-trend-chart');
+
+      if (state.trendChart) {
+        state.trendChart.destroy();
+        state.trendChart = null;
+      }
+
+      if (!trend.length) {
+        $('#trend-empty-badge').removeClass('hidden');
+        return;
+      }
+      $('#trend-empty-badge').addClass('hidden');
+
+      state.trendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: trend.map(item => item.hour),
+          datasets: [
+            {
+              label: '总请求',
+              data: trend.map(item => item.requests),
+              borderColor: '#1f2937',
+              backgroundColor: 'rgba(31, 41, 55, 0.08)',
+              fill: true,
+              tension: 0.3,
+              borderWidth: 2,
+              pointRadius: 0,
+              pointHoverRadius: 4
+            },
+            {
+              label: '成功',
+              data: trend.map(item => item.success),
+              borderColor: '#15803d',
+              backgroundColor: 'rgba(21, 128, 61, 0.12)',
+              fill: true,
+              tension: 0.3,
+              borderWidth: 2,
+              pointRadius: 0,
+              pointHoverRadius: 4
+            },
+            {
+              label: '失败',
+              data: trend.map(item => item.failure),
+              borderColor: '#dc2626',
+              backgroundColor: 'rgba(220, 38, 38, 0.12)',
+              fill: true,
+              tension: 0.3,
+              borderWidth: 2,
+              pointRadius: 0,
+              pointHoverRadius: 4
             }
-
-            const colors = [
-                'rgb(99, 102, 241)', 'rgb(139, 92, 246)', 'rgb(236, 72, 153)',
-                'rgb(249, 115, 22)', 'rgb(34, 197, 94)', 'rgb(59, 130, 246)',
-                'rgb(168, 85, 247)', 'rgb(251, 146, 60)', 'rgb(14, 165, 233)',
-                'rgb(132, 204, 22)'
-            ];
-
-            topModelsChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: data.map(m => m.model),
-                    datasets: [{
-                        data: data.map(m => m.requests),
-                        backgroundColor: colors,
-                        borderWidth: 3,
-                        borderColor: '#fff',
-                        hoverBorderWidth: 4,
-                        hoverBorderColor: '#fff'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'right',
-                            labels: {
-                                boxWidth: 15,
-                                padding: 10,
-                                font: {
-                                    size: 11,
-                                    weight: 500
-                                },
-                                generateLabels: function(chart) {
-                                    const data = chart.data;
-                                    if (data.labels.length && data.datasets.length) {
-                                        return data.labels.map((label, i) => {
-                                            const value = data.datasets[0].data[i];
-                                            const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
-                                            const percentage = ((value / total) * 100).toFixed(1);
-                                            return {
-                                                text: \`\${label} (\${percentage}%)\`,
-                                                fillStyle: data.datasets[0].backgroundColor[i],
-                                                hidden: false,
-                                                index: i
-                                            };
-                                        });
-                                    }
-                                    return [];
-                                }
-                            }
-                        },
-                        tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                            padding: 12,
-                            titleFont: { size: 13, weight: 'bold' },
-                            bodyFont: { size: 12 },
-                            cornerRadius: 8,
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed || 0;
-                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                    const percentage = ((value / total) * 100).toFixed(1);
-                                    return \`\${label}: \${value.toLocaleString()} 次 (\${percentage}%)\`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // 更新最近1小时Top 3
-        function updateRecentTopModels(data) {
-            const container = document.getElementById('recent-top-models');
-            const medals = ['🥇', '🥈', '🥉'];
-            const gradients = [
-                'from-yellow-400 via-yellow-500 to-orange-500',
-                'from-gray-300 via-gray-400 to-gray-500',
-                'from-orange-400 via-orange-500 to-red-500'
-            ];
-
-            if (data.length === 0) {
-                container.innerHTML = '<div class="col-span-3 text-center py-12 text-gray-400"><p>暂无数据</p></div>';
-                return;
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { usePointStyle: true, padding: 16 }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.85)',
+              cornerRadius: 6,
+              padding: 10,
+              titleFont: { size: 13, family: 'Inter' },
+              bodyFont: { size: 12, family: 'Inter' }
             }
-
-            container.innerHTML = data.slice(0, 3).map((model, index) => \`
-                <div class="bg-gradient-to-br \${gradients[index]} text-white rounded-xl shadow-lg p-5 transform transition-all hover:scale-105 hover:shadow-xl">
-                    <div class="flex items-center justify-between mb-3">
-                        <span class="text-3xl sm:text-4xl">\${medals[index]}</span>
-                        <span class="text-xs sm:text-sm font-bold opacity-90 bg-white/20 px-2 py-1 rounded-full">No.\${index + 1}</span>
-                    </div>
-                    <h3 class="text-base sm:text-lg font-bold mb-3 truncate" title="\${model.model}">\${model.model}</h3>
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between text-sm">
-                            <span class="opacity-90">请求数</span>
-                            <span class="font-bold text-xl">\${model.requests.toLocaleString()}</span>
-                        </div>
-                        <div class="pt-2 border-t border-white/30 grid grid-cols-3 gap-2 text-xs">
-                            <div class="text-center">
-                                <div class="opacity-75">✓ 成功</div>
-                                <div class="font-bold">\${model.success}</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="opacity-75">✗ 失败</div>
-                                <div class="font-bold">\${model.failure}</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="opacity-75">成功率</div>
-                                <div class="font-bold">\${model.successRate}%</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            \`).join('');
-        }
-
-        // 更新Top 10模型表格
-        function updateTopModelsTable(data) {
-            const tbody = document.getElementById('top-models-table');
-
-            if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-12 text-center text-gray-400">暂无数据</td></tr>';
-                return;
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(148, 163, 184, 0.2)' }
+            },
+            x: {
+              grid: { display: false }
             }
-
-            tbody.innerHTML = data.map((model, index) => {
-                const successRate = parseFloat(model.successRate);
-                const rateColor = successRate >= 95 ? 'text-green-600 bg-green-50' : successRate >= 80 ? 'text-yellow-600 bg-yellow-50' : 'text-red-600 bg-red-50';
-                const rankBg = index < 3 ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white' : 'bg-indigo-100 text-indigo-700';
-
-                return \`
-                    <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-3 sm:px-6 py-3 sm:py-4">
-                            <span class="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full \${rankBg} font-bold text-xs sm:text-sm shadow-sm">
-                                \${index + 1}
-                            </span>
-                        </td>
-                        <td class="px-3 sm:px-6 py-3 sm:py-4">
-                            <div class="font-medium text-gray-900 text-sm sm:text-base truncate max-w-xs" title="\${model.model}">
-                                \${model.model}
-                            </div>
-                        </td>
-                        <td class="px-3 sm:px-6 py-3 sm:py-4 text-center font-semibold text-gray-700 text-sm sm:text-base">
-                            \${model.requests.toLocaleString()}
-                        </td>
-                        <td class="px-3 sm:px-6 py-3 sm:py-4 text-center text-green-600 font-medium text-sm sm:text-base">
-                            \${model.success.toLocaleString()}
-                        </td>
-                        <td class="px-3 sm:px-6 py-3 sm:py-4 text-center text-red-600 font-medium text-sm sm:text-base">
-                            \${model.failure.toLocaleString()}
-                        </td>
-                        <td class="px-3 sm:px-6 py-3 sm:py-4 text-center">
-                            <span class="inline-block px-2 sm:px-3 py-1 rounded-full \${rateColor} font-bold text-xs sm:text-sm">
-                                \${model.successRate}%
-                            </span>
-                        </td>
-                    </tr>
-                \`;
-            }).join('');
+          },
+          interaction: { intersect: false, mode: 'index' }
         }
+      });
+    }
 
-        // 初始加载
-        loadStats();
+    function updateModelsChart(models) {
+      if (state.modelsChart) {
+        state.modelsChart.dispose();
+        state.modelsChart = null;
+      }
 
-        // 每30秒自动刷新
-        setInterval(loadStats, 30000);
-    </script>
+      if (!models.length) {
+        $('#top-models-empty').removeClass('hidden');
+        $('#top-models-echart').addClass('hidden');
+        return;
+      }
+      $('#top-models-empty').addClass('hidden');
+      $('#top-models-echart').removeClass('hidden');
+
+      const chartDom = document.getElementById('top-models-echart');
+      state.modelsChart = echarts.init(chartDom, null, { renderer: 'svg' });
+
+      state.modelsChart.setOption({
+        tooltip: {
+          trigger: 'item',
+          formatter: params => \`\${params.marker} \${params.name}<br/>请求数：\${numberFormatter.format(params.value)}<br/>占比：\${params.percent}%\`
+        },
+        legend: {
+          orient: 'vertical',
+          right: 0,
+          top: 'middle',
+          itemWidth: 10,
+          itemHeight: 10,
+          textStyle: { color: '#475569', fontSize: 12 }
+        },
+        series: [{
+          type: 'pie',
+          radius: ['35%', '65%'],
+          center: ['35%', '50%'],
+          itemStyle: {
+            borderRadius: 8,
+            borderColor: '#fff',
+            borderWidth: 2
+          },
+          label: {
+            color: '#1f2937',
+            formatter: '{b|{b}}\\n{c|{c}}',
+            rich: {
+              b: { fontWeight: 600, fontSize: 12 },
+              c: { color: '#6b7280', fontSize: 11 }
+            }
+          },
+          data: models.slice(0, 8).map(item => ({ name: item.model, value: item.requests }))
+        }]
+      });
+    }
+
+    function updateRecentModels(list) {
+      const container = $('#recent-top-models');
+      container.empty();
+
+      if (!list.length) {
+        $('#recent-top-models-empty').removeClass('hidden');
+        return;
+      }
+      $('#recent-top-models-empty').addClass('hidden');
+
+      list.forEach((item, index) => {
+        const successRate = item.requests > 0 ? formatPercentValue((item.success || 0) / item.requests * 100) : '--';
+        container.append(\`
+          <div class="rounded-lg border border-slate-200 bg-white px-4 py-4">
+            <div class="flex items-center justify-between text-xs text-slate-500">
+              <span class="px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-medium">#\${index + 1}</span>
+              <span>\${formatNumber(item.requests || 0)} 次</span>
+            </div>
+            <p class="mt-3 text-base font-semibold text-slate-800 break-words">\${item.model || '未知模型'}</p>
+            <dl class="mt-4 grid grid-cols-2 gap-2 text-xs text-slate-500">
+              <div>
+                <dt>成功</dt>
+                <dd class="text-slate-700 font-medium mt-1">\${formatNumber(item.success || 0)}</dd>
+              </div>
+              <div>
+                <dt>失败</dt>
+                <dd class="text-slate-700 font-medium mt-1">\${formatNumber(item.failure || 0)}</dd>
+              </div>
+              <div class="col-span-2">
+                <dt>成功率</dt>
+                <dd class="text-emerald-600 font-semibold mt-1">\${successRate}</dd>
+              </div>
+            </dl>
+          </div>
+        \`);
+      });
+    }
+
+    function updateModelsTable(models) {
+      const tbody = $('#top-models-table');
+      tbody.empty();
+
+      if (!models.length) {
+        tbody.append('<tr><td colspan="6" class="py-6 text-center text-slate-400 text-sm">暂无模型统计数据</td></tr>');
+        return;
+      }
+
+      models.forEach((item, index) => {
+        const successRate = item.requests > 0 ? formatPercentValue((item.success || 0) / item.requests * 100) : '--';
+        let rankClass = 'bg-slate-100 text-slate-500';
+        if (index === 0) rankClass = 'bg-slate-900 text-white';
+        else if (index === 1) rankClass = 'bg-slate-700 text-white';
+        else if (index === 2) rankClass = 'bg-slate-500 text-white';
+
+        tbody.append(\`
+          <tr class="border-b border-slate-100 last:border-0">
+            <td class="py-3 pr-4">
+              <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold \${rankClass}">\${index + 1}</span>
+            </td>
+            <td class="py-3 pr-4 text-slate-700 font-medium">\${item.model}</td>
+            <td class="py-3 pr-4 text-center">\${formatNumber(item.requests || 0)}</td>
+            <td class="py-3 pr-4 text-center text-emerald-600">\${formatNumber(item.success || 0)}</td>
+            <td class="py-3 pr-4 text-center text-rose-500">\${formatNumber(item.failure || 0)}</td>
+            <td class="py-3 pr-4 text-center text-slate-700 font-semibold">\${successRate}</td>
+          </tr>
+        \`);
+      });
+    }
+
+    $(document).ready(() => {
+      fetchStats(true);
+      state.timer = setInterval(() => fetchStats(false), REFRESH_INTERVAL);
+
+      $('#refresh-btn').on('click', () => {
+        fetchStats(true);
+        showToast('正在刷新', 'success');
+      });
+
+      $(window).on('beforeunload', () => {
+        if (state.timer) clearInterval(state.timer);
+      });
+
+      $(window).on('resize', () => {
+        if (state.modelsChart) {
+          state.modelsChart.resize();
+        }
+      });
+    });
+  </script>
 </body>
 </html>`;
