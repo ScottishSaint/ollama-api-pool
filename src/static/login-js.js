@@ -3,6 +3,8 @@
  */
 
 export const loginJs = `const STORAGE_KEY = 'adminToken';
+const PROJECT_START_DISPLAY = '2025-10-09';
+const PROJECT_START_DATE = new Date('2025-10-09T00:00:00+08:00');
 const loginForm = $('#login-form');
 const tokenInput = $('#admin-token');
 const rememberMe = $('#remember-me');
@@ -18,8 +20,21 @@ function updateFooterTime() {
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const seconds = String(now.getSeconds()).padStart(2, '0');
-    const timeStr = \`\${year}年\${month}月\${day}日 \${hours}:\${minutes}:\${seconds}\`;
+    const timeStr = year + '年' + month + '月' + day + '日 ' + hours + ':' + minutes + ':' + seconds;
     $('#footer-time').text(timeStr);
+
+    if (!Number.isNaN(PROJECT_START_DATE.getTime())) {
+        let diffMs = now.getTime() - PROJECT_START_DATE.getTime();
+        if (diffMs < 0) diffMs = 0;
+
+        const totalMinutes = Math.floor(diffMs / 60000);
+        const days = Math.floor(totalMinutes / 1440);
+        const hoursDiff = Math.floor((totalMinutes % 1440) / 60);
+        const minutesDiff = totalMinutes % 60;
+
+        $('#project-launch-date').text(PROJECT_START_DISPLAY);
+        $('#project-runtime').text(days + ' 天 ' + hoursDiff + ' 小时 ' + minutesDiff + ' 分钟');
+    }
 }
 updateFooterTime();
 setInterval(updateFooterTime, 1000);

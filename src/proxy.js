@@ -9,8 +9,8 @@ import { getNextApiKey, markApiKeyFailed } from './keyManager';
 import { verifyClientToken } from './auth';
 import { errorResponse, jsonResponse, corsHeaders, isKvStorageEnabled } from './utils';
 import { getCachedResponse, setCachedResponse } from './cache';
-import { isRedisEnabled, redisIncr, redisExpire } from './redis';
-import { isPostgresEnabled, pgRecordKeyStats, pgIncrementGlobalStats } from './postgres';
+import { isRedisEnabled, redisIncr, redisExpire, redisGet, redisSet } from './redis';
+import { isPostgresEnabled, pgRecordKeyStats, pgIncrementGlobalStats, pgUpsertModelStats, pgUpsertModelHourly } from './postgres';
 
 const OLLAMA_API_URL = 'https://ollama.com/v1/chat/completions';
 const MAX_RETRIES = 3;
@@ -318,13 +318,76 @@ async function recordModelStats(env, modelName, statusCode) {
   const now = Date.now();
   const hour = new Date(now).toISOString().slice(0, 13); // 精确到小时，如 "2025-01-15T08"
   const isSuccess = statusCode >= 200 && statusCode < 300;
+  const redisEnabled = isRedisEnabled(env);
+  const kvEnabled = isKvStorageEnabled(env);
+  const postgresEnabled = isPostgresEnabled(env);
 
-  // 24小时统计（总计）
-  const statsKey = `model_stats:${modelName}`;
-  if (!isKvStorageEnabled(env)) {
+  if (!redisEnabled && !kvEnabled && !postgresEnabled) {
     return;
   }
 
+  const timestamp = new Date().toISOString();
+
+  if (postgresEnabled) {
+    try {
+      await pgUpsertModelStats(env, modelName, { isSuccess, timestamp });
+      await pgUpsertModelHourly(env, modelName, hour, { isSuccess });
+    } catch (error) {
+      console.warn('Postgres 写入模型统计失败:', error);
+    }
+  }
+
+  if (redisEnabled) {
+    try {
+      const aggregateKey = `model_stats:${modelName}`;
+      const aggregateRaw = await redisGet(env, aggregateKey);
+      let aggregate = aggregateRaw ? JSON.parse(aggregateRaw) : {
+        model: modelName,
+        totalRequests: 0,
+        successCount: 0,
+        failureCount: 0,
+        lastUsed: null,
+        firstUsed: new Date().toISOString()
+      };
+
+      aggregate.totalRequests++;
+      aggregate.lastUsed = new Date().toISOString();
+      if (isSuccess) {
+        aggregate.successCount++;
+      } else {
+        aggregate.failureCount++;
+      }
+
+      await redisSet(env, aggregateKey, aggregate, 604800);
+
+      const hourlyKey = `model_hourly:${modelName}:${hour}`;
+      const hourlyRaw = await redisGet(env, hourlyKey);
+      let hourly = hourlyRaw ? JSON.parse(hourlyRaw) : {
+        model: modelName,
+        hour,
+        requests: 0,
+        success: 0,
+        failure: 0
+      };
+
+      hourly.requests++;
+      if (isSuccess) {
+        hourly.success++;
+      } else {
+        hourly.failure++;
+      }
+
+      await redisSet(env, hourlyKey, hourly, 172800);
+    } catch (error) {
+      console.warn('Redis 写入模型统计失败:', error);
+    }
+  }
+
+  if (!kvEnabled) {
+    return;
+  }
+
+  const statsKey = `model_stats:${modelName}`;
   const statsData = await env.API_KEYS.get(statsKey);
   let stats = statsData ? JSON.parse(statsData) : {
     model: modelName,
@@ -343,12 +406,10 @@ async function recordModelStats(env, modelName, statusCode) {
     stats.failureCount++;
   }
 
-  // 保存总计统计（7天过期）
   await env.API_KEYS.put(statsKey, JSON.stringify(stats), {
     expirationTtl: 604800
   });
 
-  // 每小时统计（用于趋势图）
   const hourlyKey = `model_hourly:${modelName}:${hour}`;
   const hourlyData = await env.API_KEYS.get(hourlyKey);
   let hourlyStats = hourlyData ? JSON.parse(hourlyData) : {
@@ -366,7 +427,6 @@ async function recordModelStats(env, modelName, statusCode) {
     hourlyStats.failure++;
   }
 
-  // 保存小时统计（48小时过期）
   await env.API_KEYS.put(hourlyKey, JSON.stringify(hourlyStats), {
     expirationTtl: 172800
   });

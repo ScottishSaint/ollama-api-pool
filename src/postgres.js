@@ -808,6 +808,154 @@ export async function pgDeleteClientToken(env, token) {
   });
 }
 
+export async function pgUpsertModelStats(env, modelName, { isSuccess, timestamp }) {
+  const existing = await pgRequest(env, {
+    table: 'ollama_api_model_stats',
+    query: {
+      select: 'model,total_requests,success_count,failure_count,first_used',
+      model: `eq.${modelName}`
+    },
+    single: true
+  });
+
+  const now = timestamp || new Date().toISOString();
+
+  if (!existing) {
+    const body = [{
+      model: modelName,
+      total_requests: 1,
+      success_count: isSuccess ? 1 : 0,
+      failure_count: isSuccess ? 0 : 1,
+      first_used: now,
+      last_used: now
+    }];
+
+    await pgRequest(env, {
+      method: 'POST',
+      table: 'ollama_api_model_stats',
+      body,
+      prefer: 'resolution=ignore-duplicates,return=minimal'
+    });
+    return;
+  }
+
+  const updated = {
+    total_requests: (existing.total_requests || 0) + 1,
+    success_count: (existing.success_count || 0) + (isSuccess ? 1 : 0),
+    failure_count: (existing.failure_count || 0) + (isSuccess ? 0 : 1),
+    last_used: now
+  };
+
+  if (!existing.first_used) {
+    updated.first_used = now;
+  }
+
+  await pgRequest(env, {
+    method: 'PATCH',
+    table: 'ollama_api_model_stats',
+    query: { model: `eq.${modelName}` },
+    body: updated,
+    prefer: 'return=minimal'
+  });
+}
+
+export async function pgUpsertModelHourly(env, modelName, hour, { isSuccess }) {
+  const existing = await pgRequest(env, {
+    table: 'ollama_api_model_hourly',
+    query: {
+      select: 'model,hour,requests,success,failure',
+      model: `eq.${modelName}`,
+      hour: `eq.${hour}`
+    },
+    single: true
+  });
+
+  if (!existing) {
+    const body = [{
+      model: modelName,
+      hour,
+      requests: 1,
+      success: isSuccess ? 1 : 0,
+      failure: isSuccess ? 0 : 1
+    }];
+
+    await pgRequest(env, {
+      method: 'POST',
+      table: 'ollama_api_model_hourly',
+      body,
+      prefer: 'resolution=ignore-duplicates,return=minimal'
+    });
+    return;
+  }
+
+  const updated = {
+    requests: (existing.requests || 0) + 1,
+    success: (existing.success || 0) + (isSuccess ? 1 : 0),
+    failure: (existing.failure || 0) + (isSuccess ? 0 : 1)
+  };
+
+  await pgRequest(env, {
+    method: 'PATCH',
+    table: 'ollama_api_model_hourly',
+    query: {
+      model: `eq.${modelName}`,
+      hour: `eq.${hour}`
+    },
+    body: updated,
+    prefer: 'return=minimal'
+  });
+}
+
+export async function pgListModelStats(env, limit = 10) {
+  const rows = await pgRequest(env, {
+    table: 'ollama_api_model_stats',
+    query: {
+      select: 'model,total_requests,success_count,failure_count,last_used',
+      order: 'total_requests.desc',
+      limit: String(limit)
+    }
+  });
+
+  return Array.isArray(rows) ? rows : [];
+}
+
+export async function pgGetModelHourlyAggregated(env, { hours = 24 } = {}) {
+  const now = Date.now();
+  const start = new Date(now - (hours - 1) * 3600000);
+  const startHour = start.toISOString().slice(0, 13);
+
+  const rows = await pgRequest(env, {
+    table: 'ollama_api_model_hourly',
+    query: {
+      select: 'hour,sum_requests:sum(requests),sum_success:sum(success),sum_failure:sum(failure)',
+      hour: `gte.${startHour}`,
+      group: 'hour',
+      order: 'hour.asc'
+    }
+  });
+
+  return Array.isArray(rows) ? rows : [];
+}
+
+export async function pgGetRecentTopModels(env, { hours = 1, limit = 3 } = {}) {
+  const now = Date.now();
+  const start = new Date(now - (hours - 1) * 3600000);
+  const startHour = start.toISOString().slice(0, 13);
+
+  const rows = await pgRequest(env, {
+    table: 'ollama_api_model_hourly',
+    query: {
+      select: 'model,sum_requests:sum(requests),sum_success:sum(success),sum_failure:sum(failure)',
+      hour: `gte.${startHour}`,
+      group: 'model',
+      order: 'sum_requests.desc',
+      limit: String(limit)
+    }
+  });
+
+  return Array.isArray(rows) ? rows : [];
+}
+
 async function prepareSupabaseImport(env, entries) {
   const normalized = [];
   for (const entry of entries) {

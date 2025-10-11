@@ -2,7 +2,7 @@
  * 管理后台 API 模块
  */
 
-import { errorResponse, jsonResponse } from './utils';
+import { errorResponse, jsonResponse, isKvStorageEnabled } from './utils';
 import {
   addApiKey, removeApiKey, listApiKeys, importApiKeys,
   getAllKeyStats, disableApiKey, enableApiKey, healthCheckAll,
@@ -12,7 +12,8 @@ import { createClientToken, listClientTokens, deleteClientToken } from './auth';
 import {
   getCachedStats, setCachedStats, invalidateCache, clearAllCache, getCacheStats
 } from './cache';
-import { isPostgresEnabled, pgImportApiAccountEntries, pgGetGlobalStats } from './postgres';
+import { isRedisEnabled, redisGet, redisScanPattern } from './redis';
+import { isPostgresEnabled, pgImportApiAccountEntries, pgGetGlobalStats, pgListModelStats, pgGetModelHourlyAggregated, pgGetRecentTopModels } from './postgres';
 
 export async function handleAdmin(request, env) {
   const url = new URL(request.url);
@@ -681,6 +682,7 @@ async function getPublicStats(env) {
     }
 
     const usePostgres = isPostgresEnabled(env);
+    const useRedis = isRedisEnabled(env);
 
     let globalStats = {
       totalRequests: 0,
@@ -724,19 +726,96 @@ async function getPublicStats(env) {
     const activeKeys = Math.max(totalApiKeys - failedKeys, 0);
 
     // 获取所有模型统计
-    const modelStatsList = await env.API_KEYS.list({ prefix: 'model_stats:' });
-    const models = [];
+    const modelAccumulator = new Map();
 
-    for (const item of modelStatsList.keys) {
-      const data = await env.API_KEYS.get(item.name);
-      if (data) {
-        try {
-          models.push(JSON.parse(data));
-        } catch (e) {
-          console.error('Failed to parse model stats:', e);
+    const addModelStats = (item) => {
+      if (!item || !item.model) {
+        return;
+      }
+
+      const key = item.model;
+      const record = modelAccumulator.get(key) || {
+        model: key,
+        totalRequests: 0,
+        successCount: 0,
+        failureCount: 0,
+        lastUsed: null
+      };
+
+      if (typeof item.totalRequests === 'number') {
+        record.totalRequests += item.totalRequests;
+      } else if (typeof item.requests === 'number') {
+        record.totalRequests += item.requests;
+      }
+
+      if (typeof item.successCount === 'number') {
+        record.successCount += item.successCount;
+      } else if (typeof item.success === 'number') {
+        record.successCount += item.success;
+      }
+
+      if (typeof item.failureCount === 'number') {
+        record.failureCount += item.failureCount;
+      } else if (typeof item.failure === 'number') {
+        record.failureCount += item.failure;
+      }
+
+      if (item.lastUsed) {
+        record.lastUsed = item.lastUsed;
+      }
+
+      modelAccumulator.set(key, record);
+    };
+
+    if (useRedis) {
+      try {
+        const redisKeys = await redisScanPattern(env, 'model_stats:*');
+        for (const key of redisKeys) {
+          const raw = await redisGet(env, key);
+          if (raw) {
+            try {
+              addModelStats(JSON.parse(raw));
+            } catch (error) {
+              console.error('解析 Redis 模型统计失败:', error);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Redis 模型统计读取失败:', error);
+      }
+    }
+
+    if (usePostgres) {
+      try {
+        const pgModels = await pgListModelStats(env, 10);
+        pgModels.forEach(row => addModelStats({
+          model: row.model,
+          totalRequests: row.total_requests || 0,
+          successCount: row.success_count || 0,
+          failureCount: row.failure_count || 0,
+          lastUsed: row.last_used || null
+        }));
+      } catch (error) {
+        console.warn('Postgres 模型统计读取失败:', error);
+      }
+    }
+
+    if (modelAccumulator.size === 0 && isKvStorageEnabled(env)) {
+      const modelStatsList = await env.API_KEYS.list({ prefix: 'model_stats:' });
+
+      for (const item of modelStatsList.keys) {
+        const data = await env.API_KEYS.get(item.name);
+        if (data) {
+          try {
+            addModelStats(JSON.parse(data));
+          } catch (e) {
+            console.error('Failed to parse model stats:', e);
+          }
         }
       }
     }
+
+    const models = Array.from(modelAccumulator.values());
 
     // 按请求数排序，取前10
     const topModels = models
@@ -751,13 +830,29 @@ async function getPublicStats(env) {
       }));
 
     // 获取最近24小时每小时的统计
-    const hourlyStats = await getHourlyStats(env, 24);
+    let hourlyStats = [];
+    if (usePostgres) {
+      hourlyStats = await getHourlyStatsFromPostgres(env, 24);
+    }
+    if (!hourlyStats.length) {
+      hourlyStats = await getHourlyStats(env, 24);
+    }
 
     // 获取最近1小时的Top3模型
-    const recentTopModels = await getRecentTopModels(env, 1, 3);
+    let recentTopModels = [];
+    if (usePostgres) {
+      recentTopModels = await getRecentTopModelsFromPostgres(env, 1, 3);
+    }
+    if (!recentTopModels.length) {
+      recentTopModels = await getRecentTopModels(env, 1, 3);
+    }
 
     const generatedAt = new Date().toISOString();
-    const storage = usePostgres ? 'postgres+kv' : 'kv';
+    const storageParts = [];
+    if (usePostgres) storageParts.push('postgres');
+    if (useRedis) storageParts.push('redis');
+    if (isKvStorageEnabled(env)) storageParts.push('kv');
+    const storage = storageParts.join('+') || 'memory';
     const successRateValue = globalStats.totalRequests > 0
       ? (globalStats.successCount / globalStats.totalRequests * 100)
       : 0;
@@ -842,31 +937,61 @@ async function getHourlyStats(env, hours) {
     const now = new Date();
     const stats = [];
 
-    // 优化：只调用一次 list(),避免 KV 操作限制
-    const hourlyList = await env.API_KEYS.list({ prefix: `model_hourly:`, limit: 1000 });
-
-    // 构建小时到数据的映射
     const hourDataMap = new Map();
+    let dataLoaded = false;
 
-    for (const item of hourlyList.keys) {
+    if (isRedisEnabled(env)) {
       try {
-        const data = await env.API_KEYS.get(item.name);
-        if (data) {
-          const hourData = JSON.parse(data);
-          const hour = hourData.hour; // 从数据中提取小时
-
-          if (!hourDataMap.has(hour)) {
-            hourDataMap.set(hour, { requests: 0, success: 0, failure: 0 });
+        const redisKeys = await redisScanPattern(env, 'model_hourly:*');
+        if (redisKeys.length > 0) {
+          for (const key of redisKeys) {
+            try {
+              const raw = await redisGet(env, key);
+              if (!raw) continue;
+              const hourData = JSON.parse(raw);
+              const hour = hourData.hour;
+              if (!hourDataMap.has(hour)) {
+                hourDataMap.set(hour, { requests: 0, success: 0, failure: 0 });
+              }
+              const existing = hourDataMap.get(hour);
+              existing.requests += hourData.requests || 0;
+              existing.success += hourData.success || 0;
+              existing.failure += hourData.failure || 0;
+            } catch (error) {
+              console.error('解析 Redis 小时统计失败:', key, error);
+            }
           }
-
-          const existing = hourDataMap.get(hour);
-          existing.requests += hourData.requests || 0;
-          existing.success += hourData.success || 0;
-          existing.failure += hourData.failure || 0;
+          dataLoaded = hourDataMap.size > 0;
         }
-      } catch (e) {
-        console.error('Failed to parse hourly data:', item.name, e);
+      } catch (error) {
+        console.warn('Redis 小时统计读取失败:', error);
       }
+    }
+
+    if (!dataLoaded && isKvStorageEnabled(env)) {
+      const hourlyList = await env.API_KEYS.list({ prefix: `model_hourly:`, limit: 1000 });
+
+      for (const item of hourlyList.keys) {
+        try {
+          const data = await env.API_KEYS.get(item.name);
+          if (data) {
+            const hourData = JSON.parse(data);
+            const hour = hourData.hour;
+
+            if (!hourDataMap.has(hour)) {
+              hourDataMap.set(hour, { requests: 0, success: 0, failure: 0 });
+            }
+
+            const existing = hourDataMap.get(hour);
+            existing.requests += hourData.requests || 0;
+            existing.success += hourData.success || 0;
+            existing.failure += hourData.failure || 0;
+          }
+        } catch (e) {
+          console.error('Failed to parse hourly data:', item.name, e);
+        }
+      }
+      dataLoaded = hourDataMap.size > 0;
     }
 
     // 生成最近 N 小时的统计
@@ -907,26 +1032,57 @@ async function getRecentTopModels(env, hours, topN = 3) {
     const now = new Date();
     const modelMap = new Map();
 
-    // 优化：只调用一次 list(),避免 KV 操作限制
-    const hourlyList = await env.API_KEYS.list({ prefix: `model_hourly:`, limit: 1000 });
-
-    // 计算需要的小时范围
     const targetHours = new Set();
     for (let i = 0; i < hours; i++) {
       const time = new Date(now.getTime() - i * 3600000);
       targetHours.add(time.toISOString().slice(0, 13));
     }
 
-    // 遍历所有条目并过滤目标小时
-    for (const item of hourlyList.keys) {
-      try {
-        const data = await env.API_KEYS.get(item.name);
-        if (data) {
-          const hourData = JSON.parse(data);
-          const hour = hourData.hour;
+    let dataLoaded = false;
 
-          // 只统计目标小时范围内的数据
-          if (targetHours.has(hour)) {
+    if (isRedisEnabled(env)) {
+      try {
+        const redisKeys = await redisScanPattern(env, 'model_hourly:*');
+        if (redisKeys.length > 0) {
+          for (const key of redisKeys) {
+            try {
+              const raw = await redisGet(env, key);
+              if (!raw) continue;
+              const hourData = JSON.parse(raw);
+              const hour = hourData.hour;
+              if (!targetHours.has(hour)) continue;
+
+              const modelName = hourData.model;
+              if (!modelMap.has(modelName)) {
+                modelMap.set(modelName, { requests: 0, success: 0, failure: 0 });
+              }
+              const stats = modelMap.get(modelName);
+              stats.requests += hourData.requests || 0;
+              stats.success += hourData.success || 0;
+              stats.failure += hourData.failure || 0;
+            } catch (error) {
+              console.error('解析 Redis 热门模型数据失败:', key, error);
+            }
+          }
+          dataLoaded = modelMap.size > 0;
+        }
+      } catch (error) {
+        console.warn('Redis 热门模型数据读取失败:', error);
+      }
+    }
+
+    if (!dataLoaded && isKvStorageEnabled(env)) {
+      const hourlyList = await env.API_KEYS.list({ prefix: `model_hourly:`, limit: 1000 });
+
+      for (const item of hourlyList.keys) {
+        try {
+          const data = await env.API_KEYS.get(item.name);
+          if (data) {
+            const hourData = JSON.parse(data);
+            const hour = hourData.hour;
+
+            if (!targetHours.has(hour)) continue;
+
             const modelName = hourData.model;
 
             if (!modelMap.has(modelName)) {
@@ -938,9 +1094,9 @@ async function getRecentTopModels(env, hours, topN = 3) {
             stats.success += hourData.success || 0;
             stats.failure += hourData.failure || 0;
           }
+        } catch (e) {
+          console.error('Failed to parse recent model data:', item.name, e);
         }
-      } catch (e) {
-        console.error('Failed to parse recent model data:', item.name, e);
       }
     }
 
@@ -958,6 +1114,68 @@ async function getRecentTopModels(env, hours, topN = 3) {
       .slice(0, topN);
   } catch (error) {
     console.error('getRecentTopModels error:', error);
+    return [];
+  }
+}
+
+async function getHourlyStatsFromPostgres(env, hours) {
+  try {
+    const rows = await pgGetModelHourlyAggregated(env, { hours });
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return [];
+    }
+
+    const now = new Date();
+    const stats = [];
+    const map = new Map();
+
+    for (const row of rows) {
+      const hourKey = row.hour;
+      if (!hourKey) continue;
+      map.set(hourKey, {
+        requests: Number(row.sum_requests || 0),
+        success: Number(row.sum_success || 0),
+        failure: Number(row.sum_failure || 0)
+      });
+    }
+
+    for (let i = hours - 1; i >= 0; i--) {
+      const time = new Date(now.getTime() - i * 3600000);
+      const hourKey = time.toISOString().slice(0, 13);
+      const data = map.get(hourKey) || { requests: 0, success: 0, failure: 0 };
+      stats.push({
+        hour: time.toISOString().slice(11, 16),
+        requests: data.requests,
+        success: data.success,
+        failure: data.failure
+      });
+    }
+
+    return stats;
+  } catch (error) {
+    console.error('getHourlyStatsFromPostgres error:', error);
+    return [];
+  }
+}
+
+async function getRecentTopModelsFromPostgres(env, hours, topN) {
+  try {
+    const rows = await pgGetRecentTopModels(env, { hours, limit: topN });
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return [];
+    }
+
+    return rows.map(row => ({
+      model: row.model,
+      requests: Number(row.sum_requests || 0),
+      success: Number(row.sum_success || 0),
+      failure: Number(row.sum_failure || 0),
+      successRate: Number(row.sum_requests || 0) > 0
+        ? ((Number(row.sum_success || 0) / Number(row.sum_requests || 0)) * 100).toFixed(2)
+        : '0.00'
+    }));
+  } catch (error) {
+    console.error('getRecentTopModelsFromPostgres error:', error);
     return [];
   }
 }
