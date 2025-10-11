@@ -11,6 +11,17 @@ const rememberMe = $('#remember-me');
 const errorMessage = $('#error-message');
 const startLogin = $('#start-login');
 const introSection = $('#intro-section');
+const togglePassword = $('#toggle-password');
+const eyeIcon = $('#eye-icon');
+const eyeOffIcon = $('#eye-off-icon');
+
+// 切换密码显示/隐藏
+togglePassword.on('click', () => {
+    const isPassword = tokenInput.attr('type') === 'password';
+    tokenInput.attr('type', isPassword ? 'text' : 'password');
+    eyeIcon.toggleClass('hidden', isPassword);
+    eyeOffIcon.toggleClass('hidden', !isPassword);
+});
 
 function updateFooterTime() {
     const now = new Date();
