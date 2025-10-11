@@ -171,6 +171,64 @@ CREATE INDEX IF NOT EXISTS idx_openrouter_model_hourly_time ON openrouter_api_mo
 CREATE INDEX IF NOT EXISTS idx_openrouter_model_hourly_provider ON openrouter_api_model_hourly(provider, model, hour);
 
 -- ==========================================
+-- 用户体系（全局）
+-- ==========================================
+
+CREATE TABLE IF NOT EXISTS ollama_api_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
+  role TEXT DEFAULT 'user',
+  default_provider TEXT DEFAULT 'ollama',
+  key_token TEXT,
+  key_provider TEXT DEFAULT 'ollama',
+  key_expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  last_login_at TIMESTAMPTZ,
+  last_sign_in_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS ollama_api_email_verification_codes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL,
+  code TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  status TEXT DEFAULT 'pending',
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  request_id TEXT,
+  meta JSONB DEFAULT '{}'::JSONB
+);
+
+CREATE TABLE IF NOT EXISTS ollama_api_user_access_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES ollama_api_users(id) ON DELETE CASCADE,
+  provider TEXT DEFAULT 'ollama',
+  token TEXT NOT NULL,
+  name TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ,
+  last_extended_at TIMESTAMPTZ,
+  UNIQUE(user_id, provider)
+);
+
+CREATE TABLE IF NOT EXISTS ollama_api_user_signins (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES ollama_api_users(id) ON DELETE CASCADE,
+  sign_day DATE NOT NULL DEFAULT (NOW() AT TIME ZONE 'utc')::DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, sign_day)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ollama_users_email ON ollama_api_users(email);
+CREATE INDEX IF NOT EXISTS idx_ollama_user_tokens_user ON ollama_api_user_access_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_ollama_email_codes_email_purpose ON ollama_api_email_verification_codes(email, purpose);
+CREATE INDEX IF NOT EXISTS idx_ollama_email_codes_expires ON ollama_api_email_verification_codes(expires_at);
+
+-- ==========================================
 -- 初始化全局统计记录
 -- ==========================================
 

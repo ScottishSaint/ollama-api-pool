@@ -9,7 +9,7 @@ export const statsHtml = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>实时统计 - Ollama / OpenRouter API Pool</title>
   <meta name="description" content="实时查看 Ollama / OpenRouter API Pool 的请求趋势、模型热度、成功率等关键指标，掌握代理池运行状况。">
-  <meta name="keywords" content="Ollama API Pool, OpenRouter, 实时统计, 模型热度, 请求监控, Cloudflare Workers">
+  <meta name="keywords" content="Ollama / OpenRouter, OpenRouter, 实时统计, 模型热度, 请求监控, Cloudflare Workers">
   <meta name="robots" content="index,follow">
   <link rel="canonical" href="https://ollama-api-pool.h7ml.workers.dev/stats">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -95,7 +95,7 @@ export const statsHtml = `<!DOCTYPE html>
           <span class="text-2xl">📊</span>
         </div>
         <div>
-          <p class="text-xs font-semibold uppercase tracking-[0.35em] text-primary">Ollama API Pool</p>
+          <p class="text-xs font-semibold uppercase tracking-[0.35em] text-primary">Ollama / OpenRouter</p>
           <h1 class="text-base sm:text-lg font-semibold">实时公开统计</h1>
         </div>
       </a>
@@ -118,7 +118,7 @@ export const statsHtml = `<!DOCTYPE html>
               <span id="storage-pill" class="hidden px-3 py-1 text-xs font-semibold rounded-full bg-slate-900 text-white"></span>
             </div>
             <p class="mt-2 text-sm text-slate-500">
-              追踪 Ollama API Pool 的请求趋势、模型使用表现与关键资源状态。
+              追踪 Ollama / OpenRouter 的请求趋势、模型使用表现与关键资源状态。
             </p>
           </div>
           <div class="flex flex-wrap items-center gap-3">

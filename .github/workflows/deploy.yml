@@ -69,6 +69,13 @@ jobs:
           # 统计采样率
           STATS_SAMPLE_RATE = "0.1"
           MODEL_STATS_SAMPLE_RATE = "0.2"
+          # 邮件/监控等外部服务
+          EMAIL_FORWARD_URL = "${{ secrets.EMAIL_FORWARD_URL }}"
+          EMAIL_HOST = "${{ secrets.EMAIL_HOST }}"
+          EMAIL_PORT = "${{ secrets.EMAIL_PORT }}"
+          EMAIL_SECURE = "${{ secrets.EMAIL_SECURE }}"
+          EMAIL_AUTH_USER = "${{ secrets.PUSH_EMAIL_AUTH_USER }}"
+          EMAIL_AUTH_PASS = "${{ secrets.PUSH_EMAIL_AUTH_PASS }}"
 
           # 外部存储与缓存
           REDIS_URL = "${{ secrets.OLLAMA_API_POOL_REDIS_URL }}"

@@ -69,6 +69,13 @@ function getTables(provider) {
   };
 }
 
+const GLOBAL_TABLES = {
+  users: 'ollama_api_users',
+  emailCodes: 'ollama_api_email_verification_codes',
+  userTokens: 'ollama_api_user_access_tokens',
+  userSignins: 'ollama_api_user_signins'
+};
+
 function buildHeaders(env, { hasBody = false, prefer, single, extraHeaders } = {}) {
   const headers = {
     apikey: env.SUPABASE_SERVICE_ROLE_KEY,
@@ -839,6 +846,50 @@ export async function pgListClientTokens(env, provider = 'ollama') {
     expires_at: row.expires_at,
     requestCount: row.request_count || 0
   }));
+}
+
+export async function pgCreateEmailVerificationCode(env, {
+  email,
+  code,
+  purpose,
+  status = 'pending',
+  expiresAt,
+  requestId,
+  meta
+}) {
+  const body = [{
+    email: email.toLowerCase(),
+    code,
+    purpose,
+    status,
+    expires_at: expiresAt,
+    request_id: requestId || null,
+    meta: meta || {}
+  }];
+
+  const result = await pgRequest(env, {
+    method: 'POST',
+    table: GLOBAL_TABLES.emailCodes,
+    body,
+    prefer: 'return=representation'
+  });
+
+  if (Array.isArray(result) && result.length > 0) {
+    return result[0];
+  }
+  return null;
+}
+
+export async function pgGetUserByEmail(env, email) {
+  if (!email) return null;
+  return await pgRequest(env, {
+    table: GLOBAL_TABLES.users,
+    query: {
+      select: 'id,email,password_hash,is_active,role,default_provider,key_token,key_provider,key_expires_at,created_at,updated_at,last_login_at,last_sign_in_at',
+      email: `eq.${email.toLowerCase()}`
+    },
+    single: true
+  });
 }
 
 export async function pgDeleteClientToken(env, token, provider = 'ollama') {
