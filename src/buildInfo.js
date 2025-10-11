@@ -3,7 +3,7 @@
  */
 
 // 构建时间戳（部署时生成）
-export const BUILD_TIME = new Date().toISOString();
+export const BUILD_TIME = '2025-10-11T18:57:15Z';
 
 // 格式化构建时间（中文格式）
 export function getBuildTime() {
