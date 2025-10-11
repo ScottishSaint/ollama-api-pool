@@ -4,28 +4,45 @@
 
 ![Ollama API Pool](https://img.shields.io/badge/Ollama-API_Pool-blue?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDJMMiA3TDEyIDEyTDIyIDdMMTIgMloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yIDEyTDEyIDE3TDIyIDEyIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiLz4KPHBhdGggZD0iTTIgMTdMMTIgMjJMMjIgMTciIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIvPgo8L3N2Zz4=)
 
+<!-- 许可证与平台 -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange?style=flat-square&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20.0.0-brightgreen?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-%3E%3D8.0.0-yellow?style=flat-square&logo=pnpm&logoColor=white)](https://pnpm.io/)
 
-[![Deploy Status](https://github.com/dext7r/ollama-api-pool/actions/workflows/deploy.yml/badge.svg?style=flat-square)](https://github.com/dext7r/ollama-api-pool/actions/workflows/deploy.yml)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
-[![GitHub issues](https://img.shields.io/github/issues/dext7r/ollama-api-pool?style=flat-square)](https://github.com/dext7r/ollama-api-pool/issues)
+<!-- GitHub Actions 工作流状态 -->
+[![Deploy Status](https://github.com/dext7r/ollama-api-pool/actions/workflows/deploy.yml/badge.svg)](https://github.com/dext7r/ollama-api-pool/actions/workflows/deploy.yml)
+[![API Test Status](https://github.com/dext7r/ollama-api-pool/actions/workflows/api-test.yml/badge.svg)](https://github.com/dext7r/ollama-api-pool/actions/workflows/api-test.yml)
+
+<!-- 项目统计 -->
 [![GitHub stars](https://img.shields.io/github/stars/dext7r/ollama-api-pool?style=flat-square&logo=github)](https://github.com/dext7r/ollama-api-pool/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/dext7r/ollama-api-pool?style=flat-square&logo=github)](https://github.com/dext7r/ollama-api-pool/network)
+[![GitHub issues](https://img.shields.io/github/issues/dext7r/ollama-api-pool?style=flat-square)](https://github.com/dext7r/ollama-api-pool/issues)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/dext7r/ollama-api-pool?style=flat-square)](https://github.com/dext7r/ollama-api-pool/pulls)
 [![GitHub last commit](https://img.shields.io/github/last-commit/dext7r/ollama-api-pool?style=flat-square)](https://github.com/dext7r/ollama-api-pool/commits)
 
+<!-- 代码质量与贡献 -->
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
+[![Code Style](https://img.shields.io/badge/code%20style-standard-brightgreen?style=flat-square)](https://standardjs.com)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg?style=flat-square)](https://github.com/dext7r/ollama-api-pool/graphs/commit-activity)
+
+<!-- 技术特性 -->
 [![OpenAI Compatible](https://img.shields.io/badge/OpenAI-Compatible-412991?style=flat-square&logo=openai&logoColor=white)](https://platform.openai.com/docs/api-reference)
+[![Multi Provider](https://img.shields.io/badge/Multi-Provider-blue?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8Y2lyY2xlIGN4PSI2IiBjeT0iMTIiIHI9IjMiIGZpbGw9IndoaXRlIi8+CiAgPGNpcmNsZSBjeD0iMTgiIGN5PSIxMiIgcj0iMyIgZmlsbD0id2hpdGUiLz4KICA8Y2lyY2xlIGN4PSIxMiIgY3k9IjYiIHI9IjMiIGZpbGw9IndoaXRlIi8+CiAgPGNpcmNsZSBjeD0iMTIiIGN5PSIxOCIgcj0iMyIgZmlsbD0id2hpdGUiLz4KPC9zdmc+)](https://ollama-api-pool.h7ml.workers.dev/api-docs)
 [![Serverless](https://img.shields.io/badge/Serverless-Edge_Computing-purple?style=flat-square&logo=serverless&logoColor=white)](https://workers.cloudflare.com/)
 [![High Availability](https://img.shields.io/badge/High-Availability-success?style=flat-square&logo=statuspage&logoColor=white)](https://ollama-api-pool.h7ml.workers.dev/health)
 [![Load Balancing](https://img.shields.io/badge/Load-Balancing-blue?style=flat-square&logo=nginx&logoColor=white)](https://ollama-api-pool.h7ml.workers.dev/api-docs)
 
-基于 Cloudflare Workers 的 Ollama API 代理池，支持多账号轮询、自动故障转移和统一鉴权。
+<!-- 存储支持 -->
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supported-336791?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-Supported-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
+[![Cloudflare KV](https://img.shields.io/badge/Cloudflare-KV-orange?style=flat-square&logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/kv/)
+
+基于 Cloudflare Workers 的智能 Ollama/OpenRouter API 代理池，支持多 Provider、多账号轮询、自动故障转移和统一鉴权。
 
 [English](./README_EN.md) | 简体中文
 
-**[🚀 在线演示](https://ollama-api-pool.h7ml.workers.dev)** | **[📚 API 文档](https://ollama-api-pool.h7ml.workers.dev/api-docs)** | **[💬 讨论区](https://github.com/dext7r/ollama-api-pool/discussions)**
+**[🚀 在线演示](https://ollama-api-pool.h7ml.workers.dev)** | **[📚 API 文档](https://ollama-api-pool.h7ml.workers.dev/api-docs)** | **[📊 实时统计](https://ollama-api-pool.h7ml.workers.dev/stats)** | **[💬 讨论区](https://github.com/dext7r/ollama-api-pool/discussions)**
 
 </div>
 
@@ -33,18 +50,31 @@
 
 ## ✨ 功能特性
 
-- 🔄 **API 轮询** - 自动轮换多个 Ollama API Key，均衡负载
+### 🌐 多 Provider 支持
+- 🦙 **Ollama** - 支持 Ollama 官方 API
+- 🔀 **OpenRouter** - 支持 OpenRouter API，访问多种 LLM 模型
+- 🔌 **统一接口** - 所有 Provider 使用相同的 OpenAI 兼容接口
+- 🎯 **智能路由** - 根据路径自动识别 Provider（如 `/openrouter/v1/chat/completions`）
+
+### 💡 核心功能
+- 🔄 **API 轮询** - 自动轮换多个 API Key，均衡负载
 - 🛡️ **故障转移** - 检测失效 Key 并自动切换
 - 🤖 **智能管理** - 自动禁用连续失败的 Key，支持手动启用/禁用
 - 📊 **使用统计** - 实时统计每个 Key 的请求、成功率、失败次数
 - 🏥 **健康检查** - 批量验证 API Key 可用性
 - 🔐 **统一鉴权** - 自定义客户端 Token，保护上游 API Key
-- 🎯 **分类管理** - 导入时自动识别并分类 API Key（kimi/llama/qwen等）
+
+### 📦 管理功能
+- 🎯 **分类管理** - 导入时自动识别并分类 API Key（kimi/llama/qwen 等）
 - 📥 **批量导入** - 支持从 ollama.txt 文件导入账号
 - 🔍 **验证导入** - 逐行验证 API Key 有效性并自动分类
 - 🎛️ **管理后台** - Web 界面管理 API Keys 和客户端 Tokens
-- ⚡ **高性能** - 基于 Cloudflare Workers，全球 CDN 加速
-- 🗄️ **多层存储** - 支持 PostgreSQL + Redis + KV 混合架构，建议启用数据库与缓存承载大规模流量
+
+### ⚡ 性能与存储
+- 🚀 **高性能** - 基于 Cloudflare Workers，全球 CDN 加速
+- 🗄️ **多层存储** - 支持 PostgreSQL + Redis + KV 混合架构
+- 💾 **灵活配置** - 可选启用数据库与缓存承载大规模流量
+- 📈 **可扩展** - 轻松承载十万级账号池或高频调用
 
 ## 🚀 快速开始
 
@@ -219,12 +249,29 @@ curl https://ollama-api-pool.your-name.workers.dev/v1/chat/completions \
 
 ### API 端点
 
+#### Ollama API
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/v1/chat/completions` | POST | Ollama Chat Completions (OpenAI 兼容) |
+| `/v1/models` | GET | 获取 Ollama 模型列表 |
+
+#### OpenRouter API
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/openrouter/v1/chat/completions` | POST | OpenRouter Chat Completions (OpenAI 兼容) |
+| `/openrouter/v1/models` | GET | 获取 OpenRouter 模型列表 |
+
+#### 管理 API
+
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/` | GET | 管理后台首页 |
-| `/v1/chat/completions` | POST | Ollama API 代理 (OpenAI 兼容) |
-| `/v1/models` | GET | 模型列表 |
 | `/health` | GET | 健康检查 |
+| `/stats` | GET | 公开统计页面 |
+| `/api-docs` | GET | API 使用文档 |
+| `/admin/public-stats` | GET | 公开统计数据 API |
 | `/admin/api-keys` | GET/POST/DELETE | 管理 API Keys |
 | `/admin/api-keys/import` | POST | 批量导入 API Keys |
 | `/admin/api-keys/import-from-txt` | POST | 从 ollama.txt 格式导入 |
@@ -235,6 +282,10 @@ curl https://ollama-api-pool.your-name.workers.dev/v1/chat/completions \
 | `/admin/keys/health-check` | POST | 批量健康检查 |
 | `/admin/tokens` | GET/POST/DELETE | 管理客户端 Tokens |
 | `/admin/stats` | GET | 获取统计概览 |
+| `/admin/cache/stats` | GET | 获取缓存统计 |
+| `/admin/cache/clear` | POST | 清除缓存 |
+
+> 💡 **提示**：管理 API 支持通过 `?provider=openrouter` 参数指定 Provider
 
 ## 🛠️ 配置选项
 
