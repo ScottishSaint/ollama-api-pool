@@ -10,6 +10,7 @@ import {
   redisDeleteMany,
   redisScanPattern
 } from './redis';
+import { isKvStorageEnabled } from './utils';
 
 // 缓存配置
 const CACHE_CONFIG = {
@@ -80,12 +81,14 @@ export async function getCachedResponse(env, requestBody) {
     }
   }
 
-  const cached = await env.API_KEYS.get(cacheKey);
-  if (cached) {
-    const data = JSON.parse(cached);
-    // 检查是否过期
-    if (Date.now() - data.timestamp < CACHE_CONFIG.response.ttl * 1000) {
-      return data.response;
+  if (isKvStorageEnabled(env)) {
+    const cached = await env.API_KEYS.get(cacheKey);
+    if (cached) {
+      const data = JSON.parse(cached);
+      // 检查是否过期
+      if (Date.now() - data.timestamp < CACHE_CONFIG.response.ttl * 1000) {
+        return data.response;
+      }
     }
   }
 
@@ -116,9 +119,18 @@ export async function setCachedResponse(env, requestBody, response) {
 
   if (isRedisEnabled(env)) {
     const redisResult = await redisSet(env, cacheKey, cacheData, CACHE_CONFIG.response.ttl);
-    if (!redisResult) {
-      console.warn('Redis 写入响应缓存失败，回退 KV');
+    if (redisResult) {
+      return;
     }
+    if (isKvStorageEnabled(env)) {
+      console.warn('Redis 写入响应缓存失败，将尝试 KV');
+    } else {
+      console.warn('Redis 写入响应缓存失败，已跳过 KV 备份');
+    }
+  }
+
+  if (!isKvStorageEnabled(env)) {
+    return;
   }
 
   await env.API_KEYS.put(cacheKey, JSON.stringify(cacheData), {
@@ -148,11 +160,13 @@ export async function getCachedModels(env) {
     }
   }
 
-  const cached = await env.API_KEYS.get('cache:models:list');
-  if (cached) {
-    const data = JSON.parse(cached);
-    if (Date.now() - data.timestamp < CACHE_CONFIG.models.ttl * 1000) {
-      return data.models;
+  if (isKvStorageEnabled(env)) {
+    const cached = await env.API_KEYS.get('cache:models:list');
+    if (cached) {
+      const data = JSON.parse(cached);
+      if (Date.now() - data.timestamp < CACHE_CONFIG.models.ttl * 1000) {
+        return data.models;
+      }
     }
   }
 
@@ -174,9 +188,18 @@ export async function setCachedModels(env, models) {
 
   if (isRedisEnabled(env)) {
     const redisResult = await redisSet(env, 'cache:models:list', cacheData, CACHE_CONFIG.models.ttl);
-    if (!redisResult) {
-      console.warn('Redis 写入模型缓存失败，回退 KV');
+    if (redisResult) {
+      return;
     }
+    if (isKvStorageEnabled(env)) {
+      console.warn('Redis 写入模型缓存失败，将尝试 KV');
+    } else {
+      console.warn('Redis 写入模型缓存失败，已跳过 KV 备份');
+    }
+  }
+
+  if (!isKvStorageEnabled(env)) {
+    return;
   }
 
   await env.API_KEYS.put('cache:models:list', JSON.stringify(cacheData), {
@@ -206,11 +229,13 @@ export async function getCachedApiKeys(env) {
     }
   }
 
-  const cached = await env.API_KEYS.get('cache:apikeys:list');
-  if (cached) {
-    const data = JSON.parse(cached);
-    if (Date.now() - data.timestamp < CACHE_CONFIG.apiKeys.ttl * 1000) {
-      return data.keys;
+  if (isKvStorageEnabled(env)) {
+    const cached = await env.API_KEYS.get('cache:apikeys:list');
+    if (cached) {
+      const data = JSON.parse(cached);
+      if (Date.now() - data.timestamp < CACHE_CONFIG.apiKeys.ttl * 1000) {
+        return data.keys;
+      }
     }
   }
 
@@ -232,9 +257,18 @@ export async function setCachedApiKeys(env, keys) {
 
   if (isRedisEnabled(env)) {
     const redisResult = await redisSet(env, 'cache:apikeys:list', cacheData, CACHE_CONFIG.apiKeys.ttl);
-    if (!redisResult) {
-      console.warn('Redis 写入 API Key 缓存失败，回退 KV');
+    if (redisResult) {
+      return;
     }
+    if (isKvStorageEnabled(env)) {
+      console.warn('Redis 写入 API Key 缓存失败，将尝试 KV');
+    } else {
+      console.warn('Redis 写入 API Key 缓存失败，已跳过 KV 备份');
+    }
+  }
+
+  if (!isKvStorageEnabled(env)) {
+    return;
   }
 
   await env.API_KEYS.put('cache:apikeys:list', JSON.stringify(cacheData), {
@@ -265,12 +299,14 @@ export async function getCachedStats(env, statsType) {
   }
 
   const cacheKey = `cache:stats:${statsType}`;
-  const cached = await env.API_KEYS.get(cacheKey);
+  if (isKvStorageEnabled(env)) {
+    const cached = await env.API_KEYS.get(cacheKey);
 
-  if (cached) {
-    const data = JSON.parse(cached);
-    if (Date.now() - data.timestamp < CACHE_CONFIG.stats.ttl * 1000) {
-      return data.stats;
+    if (cached) {
+      const data = JSON.parse(cached);
+      if (Date.now() - data.timestamp < CACHE_CONFIG.stats.ttl * 1000) {
+        return data.stats;
+      }
     }
   }
 
@@ -293,9 +329,18 @@ export async function setCachedStats(env, statsType, stats) {
 
   if (isRedisEnabled(env)) {
     const redisResult = await redisSet(env, cacheKey, cacheData, CACHE_CONFIG.stats.ttl);
-    if (!redisResult) {
-      console.warn('Redis 写入统计缓存失败，回退 KV');
+    if (redisResult) {
+      return;
     }
+    if (isKvStorageEnabled(env)) {
+      console.warn('Redis 写入统计缓存失败，将尝试 KV');
+    } else {
+      console.warn('Redis 写入统计缓存失败，已跳过 KV 备份');
+    }
+  }
+
+  if (!isKvStorageEnabled(env)) {
+    return;
   }
 
   await env.API_KEYS.put(cacheKey, JSON.stringify(cacheData), {
@@ -314,6 +359,10 @@ export async function invalidateCache(env, pattern) {
     if (keys.length > 0) {
       await redisDeleteMany(env, keys);
     }
+  }
+
+  if (!isKvStorageEnabled(env)) {
+    return;
   }
 
   const list = await env.API_KEYS.list({ prefix: `cache:${pattern}` });
@@ -343,7 +392,9 @@ export async function clearAllCache(env) {
  * 获取缓存统计信息
  */
 export async function getCacheStats(env) {
-  const list = await env.API_KEYS.list({ prefix: 'cache:' });
+  const list = isKvStorageEnabled(env)
+    ? await env.API_KEYS.list({ prefix: 'cache:' })
+    : { keys: [] };
 
   let redisKeys = [];
   if (isRedisEnabled(env)) {
@@ -387,12 +438,14 @@ export async function getCacheStats(env) {
  */
 export async function withCache(env, cacheKey, ttl, fetchFn) {
   // 尝试从缓存获取
-  const cached = await env.API_KEYS.get(cacheKey);
+  if (isKvStorageEnabled(env)) {
+    const cached = await env.API_KEYS.get(cacheKey);
 
-  if (cached) {
-    const data = JSON.parse(cached);
-    if (Date.now() - data.timestamp < ttl * 1000) {
-      return data.value;
+    if (cached) {
+      const data = JSON.parse(cached);
+      if (Date.now() - data.timestamp < ttl * 1000) {
+        return data.value;
+      }
     }
   }
 
@@ -404,6 +457,10 @@ export async function withCache(env, cacheKey, ttl, fetchFn) {
     value,
     timestamp: Date.now()
   };
+
+  if (!isKvStorageEnabled(env)) {
+    return value;
+  }
 
   await env.API_KEYS.put(cacheKey, JSON.stringify(cacheData), {
     expirationTtl: ttl

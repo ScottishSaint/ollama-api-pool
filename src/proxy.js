@@ -7,7 +7,7 @@
 
 import { getNextApiKey, markApiKeyFailed } from './keyManager';
 import { verifyClientToken } from './auth';
-import { errorResponse, jsonResponse, corsHeaders } from './utils';
+import { errorResponse, jsonResponse, corsHeaders, isKvStorageEnabled } from './utils';
 import { getCachedResponse, setCachedResponse } from './cache';
 import { isRedisEnabled, redisIncr, redisExpire } from './redis';
 import { isPostgresEnabled, pgRecordKeyStats, pgIncrementGlobalStats } from './postgres';
@@ -46,7 +46,7 @@ export async function handleProxyRequest(request, env) {
         if (count !== null && count > rateLimitRequests) {
           return errorResponse(`Rate limit exceeded. Max ${rateLimitRequests} requests per ${rateLimitWindow}s.`, 429);
         }
-      } else {
+      } else if (isKvStorageEnabled(env)) {
         const currentCount = await env.API_KEYS.get(rateLimitKey);
         if (currentCount && parseInt(currentCount, 10) > rateLimitRequests) {
           return errorResponse(`Rate limit exceeded. Max ${rateLimitRequests} requests per ${rateLimitWindow}s.`, 429);
@@ -215,6 +215,10 @@ async function recordKeyStats(env, apiKey, statusCode) {
     return;
   }
 
+  if (!isKvStorageEnabled(env)) {
+    return;
+  }
+
   const statsKey = `key_stats:${apiKey}`;
   const isSuccess = statusCode >= 200 && statusCode < 300;
 
@@ -256,7 +260,7 @@ async function recordKeyStats(env, apiKey, statusCode) {
   });
 
   // 智能禁用逻辑: 连续失败 3 次自动禁用 1 小时
-  if (stats.consecutiveFailures >= 3) {
+  if (stats.consecutiveFailures >= 3 && isKvStorageEnabled(env)) {
     await env.API_KEYS.put(`failed:${apiKey}`, 'auto-disabled', {
       expirationTtl: 3600
     });
@@ -265,6 +269,10 @@ async function recordKeyStats(env, apiKey, statusCode) {
 
 // 更新全局统计信息（KV 版本）
 async function updateGlobalStatsKV(env, isSuccess) {
+  if (!isKvStorageEnabled(env)) {
+    return;
+  }
+
   const globalStatsData = await env.API_KEYS.get('global_stats');
   let globalStats = globalStatsData ? JSON.parse(globalStatsData) : {
     totalRequests: 0,
@@ -291,6 +299,15 @@ async function updateGlobalStatsAccurate(env, isSuccess) {
     if (ok) {
       return;
     }
+
+    if (!isKvStorageEnabled(env)) {
+      console.warn('pgIncrementGlobalStats 失败，但 KV 已禁用，跳过全局统计写入');
+      return;
+    }
+  }
+
+  if (!isKvStorageEnabled(env)) {
+    return;
   }
 
   await updateGlobalStatsKV(env, isSuccess);
@@ -304,6 +321,10 @@ async function recordModelStats(env, modelName, statusCode) {
 
   // 24小时统计（总计）
   const statsKey = `model_stats:${modelName}`;
+  if (!isKvStorageEnabled(env)) {
+    return;
+  }
+
   const statsData = await env.API_KEYS.get(statsKey);
   let stats = statsData ? JSON.parse(statsData) : {
     model: modelName,
