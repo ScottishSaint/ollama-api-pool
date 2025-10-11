@@ -1,15 +1,18 @@
 name: API 接口测试
 
 on:
-  push:
-    branches:
-      - main
-      - openrouter
   pull_request:
     branches:
       - main
       - openrouter
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Deploy to Cloudflare Workers"]
+    types:
+      - completed
+    branches:
+      - main
+      - openrouter
   schedule:
     # 每天 UTC 时间 00:00 运行（北京时间 08:00）
     - cron: '0 0 * * *'
@@ -17,6 +20,10 @@ on:
 jobs:
   api-test:
     runs-on: ubuntu-latest
+    # 仅在 deploy 成功后运行，或者是 PR/手动触发/定时任务
+    if: |
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: read
       pull-requests: write
@@ -87,7 +94,7 @@ jobs:
             }
 
       - name: 💬 发布测试报告（Push Summary）
-        if: always() && github.event_name == 'push'
+        if: always() && github.event_name == 'workflow_run'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
