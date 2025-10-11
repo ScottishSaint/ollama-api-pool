@@ -174,19 +174,60 @@ This project includes GitHub Actions for automatic deployment to Cloudflare Work
 
 5. **Push to main branch** - Deployment starts automatically, URLs will be shown in Actions logs
 
+### Manual Deployment Trigger
+
+In GitHub Actions page, select "Deploy to Cloudflare Workers" workflow and click "Run workflow".
+
+## 📊 Architecture
+
+```mermaid
+graph TB
+    Client[Client Application]
+    CF[Cloudflare Workers<br/>Global CDN Edge]
+    Auth[Authentication]
+    Pool[API Pool Manager]
+    Cache[Cache Layer]
+    Storage[Storage Layer]
+
+    Ollama[Ollama API]
+    OpenRouter[OpenRouter API]
+
+    Redis[(Redis<br/>Cache)]
+    PG[(PostgreSQL<br/>Supabase)]
+    KV[(Cloudflare KV)]
+
+    Client -->|HTTPS Request| CF
+    CF --> Auth
+    Auth -->|Verify Token| Pool
+    Pool --> Cache
+    Cache --> Storage
+
+    Pool -->|Round-robin| Ollama
+    Pool -->|Round-robin| OpenRouter
+
+    Storage --> Redis
+    Storage --> PG
+    Storage --> KV
+
+    style CF fill:#f96,stroke:#333,stroke-width:2px
+    style Pool fill:#6c6,stroke:#333,stroke-width:2px
+    style Storage fill:#69f,stroke:#333,stroke-width:2px
+```
+
 ## 📖 Usage
 
 ### Admin Dashboard
 
 Access the deployed URL (e.g., `https://ollama-api-pool.your-name.workers.dev`) and enter your admin token.
 
-#### Import API Keys
+<details>
+<summary><b>📥 Import API Keys</b></summary>
 
-##### Method 1: Single Add
+#### Method 1: Single Add
 
 Enter an Ollama API Key in the "API Keys" tab and click Add.
 
-##### Method 2: Batch Import
+#### Method 2: Batch Import
 
 1. Switch to "Batch Import" tab
 2. Paste `ollama.txt` content
@@ -199,14 +240,20 @@ test@example.com----password123----session_token----ollama-abc123...
 user@test.com----pass456----session_data----ollama-def456...
 ```
 
-#### Create Client Tokens
+</details>
+
+<details>
+<summary><b>🔑 Create Client Tokens</b></summary>
 
 1. Switch to "Client Tokens" tab
 2. Enter token name
 3. Click Create
 4. Copy the generated token for client use
 
-#### View Key Statistics
+</details>
+
+<details>
+<summary><b>📊 View Key Statistics</b></summary>
 
 1. Switch to "Analytics" tab
 2. View detailed stats for each key:
@@ -216,6 +263,8 @@ user@test.com----pass456----session_data----ollama-def456...
    - Current status (active/disabled)
 3. Manually enable/disable keys
 4. Run batch health checks
+
+</details>
 
 ### API Calls
 
@@ -272,7 +321,251 @@ curl https://ollama-api-pool.your-name.workers.dev/v1/chat/completions \
 
 > 💡 **Tip**: Management APIs support `?provider=openrouter` parameter to specify provider
 
+## 🛠️ Configuration
+
+<details>
+<summary><b>📝 wrangler.toml Configuration Guide</b></summary>
+
+```toml
+name = "ollama-api-pool"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[[kv_namespaces]]
+binding = "API_KEYS"
+id = "your-kv-namespace-id"
+
+[[kv_namespaces]]
+binding = "ACCOUNTS"
+id = "your-accounts-kv-id"
+
+[vars]
+# Admin token (must be changed)
+ADMIN_TOKEN = "your-admin-secret-token"
+
+# Feature switches
+ENABLE_ANALYTICS = "true"        # Enable analytics
+ENABLE_RATE_LIMIT = "true"       # Enable IP rate limiting
+ENABLE_BOT_DETECTION = "true"    # Enable bot detection
+DISABLE_KV_STORAGE = "true"      # Disable KV writes, use Redis/Postgres
+
+# Rate limiting configuration
+RATE_LIMIT_REQUESTS = "60"       # Max requests per IP per minute
+RATE_LIMIT_WINDOW = "60"         # Time window (seconds)
+
+# Statistics sampling rates (reduce KV write pressure)
+STATS_SAMPLE_RATE = "0.1"        # Global stats sampling rate (0.1 = 10%)
+MODEL_STATS_SAMPLE_RATE = "0.2"  # Model stats sampling rate (0.2 = 20%)
+
+# External storage (optional but highly recommended)
+REDIS_URL = "rediss://default:***@your-redis.upstash.io:6379"
+DATABASE_URL = "postgresql://postgres.***:***@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+SUPABASE_REST_URL = "https://your-project.supabase.co/rest/v1"
+SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOi..."
+```
+
+> ✅ **Recommended Setup**: PostgreSQL (Supabase) + Redis (Upstash) + Cloudflare KV
+
+</details>
+
+<details>
+<summary><b>🗄️ PostgreSQL (Supabase) Database Integration</b></summary>
+
+### Create Database Tables
+
+1. Execute the following SQL in your Supabase project:
+
+```sql
+-- API Keys main table
+create table if not exists ollama_api_keys (
+  api_key text primary key,
+  username text,
+  status text default 'active',
+  created_at timestamptz default now(),
+  expires_at timestamptz,
+  failed_until timestamptz,
+  disabled_until timestamptz,
+  consecutive_failures integer default 0
+);
+
+-- API Keys statistics table
+create table if not exists ollama_api_key_stats (
+  api_key text primary key references ollama_api_keys(api_key) on delete cascade,
+  total_requests bigint default 0,
+  success_count bigint default 0,
+  failure_count bigint default 0,
+  success_rate numeric default 0,
+  last_used timestamptz,
+  last_success timestamptz,
+  last_failure timestamptz,
+  consecutive_failures integer default 0,
+  created_at timestamptz default now()
+);
+
+-- Client tokens table
+create table if not exists ollama_api_client_tokens (
+  token text primary key,
+  name text,
+  created_at timestamptz default now(),
+  expires_at timestamptz,
+  request_count bigint default 0
+);
+
+-- Global statistics table
+create table if not exists ollama_api_global_stats (
+  id text primary key default 'global',
+  total_requests bigint default 0,
+  success_count bigint default 0,
+  failure_count bigint default 0,
+  updated_at timestamptz default now()
+);
+
+-- Model statistics table (multi-provider support)
+create table if not exists ollama_api_model_stats (
+  id serial primary key,
+  provider text default 'ollama',
+  model text not null,
+  total_requests bigint default 0,
+  success_count bigint default 0,
+  failure_count bigint default 0,
+  last_used timestamptz,
+  created_at timestamptz default now(),
+  unique(provider, model)
+);
+
+-- Hourly model statistics (for trend charts)
+create table if not exists ollama_api_model_hourly (
+  id serial primary key,
+  provider text default 'ollama',
+  model text not null,
+  hour timestamptz not null,
+  requests bigint default 0,
+  success bigint default 0,
+  failure bigint default 0,
+  created_at timestamptz default now(),
+  unique(provider, model, hour)
+);
+```
+
+2. Get from Supabase project settings:
+   - **Service Role Key** → `SUPABASE_SERVICE_ROLE_KEY`
+   - **REST URL** → `SUPABASE_REST_URL`
+   - **Connection String** → `DATABASE_URL`
+
+3. Add configuration to `wrangler.toml` or GitHub Secrets
+
+### OpenRouter Table Structure
+
+To support OpenRouter, add tables with `openrouter_api_` prefix:
+
+```sql
+-- OpenRouter API Keys table
+create table if not exists openrouter_api_keys (
+  api_key text primary key,
+  username text,
+  status text default 'active',
+  created_at timestamptz default now(),
+  expires_at timestamptz,
+  failed_until timestamptz,
+  disabled_until timestamptz,
+  consecutive_failures integer default 0
+);
+
+-- Other tables follow similar naming...
+```
+
+</details>
+
+## 📚 Documentation
+
+- **[Configuration Guide](./CONFIGURATION.md)** - Detailed environment variable configuration
+- **[Optimization Guide](./OPTIMIZATION.md)** - KV optimization and performance tuning
+- **[Contributing Guide](./CONTRIBUTING.md)** - How to contribute to the project
+- **[API Documentation](https://ollama-api-pool.h7ml.workers.dev/api-docs)** - Online API docs
+- **[Live Statistics](https://ollama-api-pool.h7ml.workers.dev/stats)** - Public statistics dashboard
+
+---
+
+## 📊 How It Works
+
+### Request Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant W as Workers
+    participant A as Authentication
+    participant P as API Pool
+    participant O as Ollama API
+    participant R as OpenRouter API
+
+    C->>W: HTTPS Request
+    W->>A: Verify Client Token
+    A-->>W: Token Valid
+    W->>P: Get Available API Key
+    P->>P: Round-robin rotation
+
+    alt Ollama Request
+        P->>O: Forward with API Key
+        O-->>P: Response
+    else OpenRouter Request
+        P->>R: Forward with API Key
+        R-->>P: Response
+    end
+
+    alt Request Success
+        P->>P: Record success stats
+        P-->>W: Return result
+    else Request Failed
+        P->>P: Mark failure + Retry
+        P->>P: Auto-disable after 3 consecutive failures
+    end
+
+    W-->>C: Return response
+```
+
+<details>
+<summary><b>⚙️ Key Rotation Strategy</b></summary>
+
+- **Rotation Algorithm**: Round-robin
+- **Failure Marking**: Mark failed keys for 1 hour
+- **Auto Recovery**: Retry automatically after 1 hour
+- **Max Retries**: Maximum 3 retries per request
+
+</details>
+
+<details>
+<summary><b>🤖 Smart Management</b></summary>
+
+- **Auto Disable**: Automatically disable keys after 3 consecutive failures for 1 hour
+- **Manual Control**: Support manual enable/disable of any key with custom duration
+- **Health Check**: Batch validate all key availability and auto-update status
+- **Analytics**: Real-time tracking for each key:
+  - Total requests, success/failure counts
+  - Success rate percentage
+  - Last used time
+  - Consecutive failure count
+  - Disable reason (auto/manual)
+
+</details>
+
+## 🔒 Security Recommendations
+
+<details>
+<summary><b>🛡️ Security Best Practices</b></summary>
+
+1. **Protect Admin Token**: Use strong random password
+2. **Limit Client Tokens**: Create separate tokens for different users
+3. **Regular Rotation**: Periodically update API Keys and Tokens
+4. **Monitor Logs**: Regularly check statistics
+5. **Access Control**: Restrict admin dashboard access by IP
+
+</details>
+
 ## 📝 Development
+
+<details>
+<summary><b>🔧 Development Commands</b></summary>
 
 ### Local Testing
 
@@ -291,6 +584,62 @@ pnpm wrangler tail
 ```bash
 pnpm deploy
 ```
+
+</details>
+
+## 🐛 Troubleshooting
+
+<details>
+<summary><b>❓ Common Issues and Solutions</b></summary>
+
+### API Key Frequently Fails
+
+Check if upstream Ollama API Key is valid:
+
+```bash
+curl https://ollama.com/v1/chat/completions \
+  -H "Authorization: Bearer ollama-xxx..." \
+  -H "Content-Type: application/json" \
+  -d '{"model":"llama3.2:1b","messages":[{"role":"user","content":"test"}]}'
+```
+
+### Client Cannot Connect
+
+- Check if client token is valid
+- View Worker logs: `pnpm wrangler tail`
+- Verify CORS configuration
+
+### Import Failed
+
+Ensure ollama.txt format is correct:
+
+```text
+email----password----session----api_key
+```
+
+</details>
+
+## 📦 Project Structure
+
+<details>
+<summary><b>📁 Directory Layout</b></summary>
+
+```text
+ollama-api-pool/
+├── src/
+│   ├── index.js       # Main entry point
+│   ├── proxy.js       # API proxy
+│   ├── auth.js        # Authentication module
+│   ├── admin.js       # Admin API
+│   ├── keyManager.js  # Key management
+│   ├── dashboard.js   # Admin dashboard
+│   └── utils.js       # Utility functions
+├── wrangler.toml      # Cloudflare configuration
+├── package.json       # Dependencies
+└── README.md          # Documentation
+```
+
+</details>
 
 ## 🤝 Contributing
 

@@ -189,19 +189,56 @@ pnpm deploy
 
 在 GitHub Actions 页面，选择 "Deploy to Cloudflare Workers" 工作流，点击 "Run workflow"。
 
+## 📊 架构
+
+```mermaid
+graph TB
+    Client[客户端应用]
+    CF[Cloudflare Workers<br/>全球 CDN 边缘节点]
+    Auth[鉴权模块]
+    Pool[API 池管理器]
+    Cache[缓存层]
+    Storage[存储层]
+
+    Ollama[Ollama API]
+    OpenRouter[OpenRouter API]
+
+    Redis[(Redis<br/>缓存)]
+    PG[(PostgreSQL<br/>Supabase)]
+    KV[(Cloudflare KV)]
+
+    Client -->|HTTPS Request| CF
+    CF --> Auth
+    Auth -->|验证 Token| Pool
+    Pool --> Cache
+    Cache --> Storage
+
+    Pool -->|轮询分发| Ollama
+    Pool -->|轮询分发| OpenRouter
+
+    Storage --> Redis
+    Storage --> PG
+    Storage --> KV
+
+    style CF fill:#f96,stroke:#333,stroke-width:2px
+    style Pool fill:#6c6,stroke:#333,stroke-width:2px
+    style Storage fill:#69f,stroke:#333,stroke-width:2px
+```
+
 ## 📖 使用说明
 
 ### 管理后台
 
 访问部署后的 URL (如 `https://ollama-api-pool.your-name.workers.dev`)，输入管理员 Token 进入后台。
 
-#### 导入 API Keys
+<details>
+<summary><b>📥 导入 API Keys</b></summary>
 
-##### 方式一: 单个添加
+#### 方式一: 单个添加
 
 在 "API Keys" 标签页输入 Ollama API Key 点击添加。
 
-##### 方式二: 批量导入
+#### 方式二: 批量导入
 
 1. 切换到 "批量导入" 标签
 2. 粘贴 `ollama.txt` 文件内容
@@ -214,14 +251,20 @@ test@example.com----password123----session_token----ollama-abc123...
 user@test.com----pass456----session_data----ollama-def456...
 ```
 
-#### 创建客户端 Token
+</details>
+
+<details>
+<summary><b>🔑 创建客户端 Token</b></summary>
 
 1. 切换到 "客户端 Tokens" 标签
 2. 输入 Token 名称
 3. 点击创建
 4. 复制生成的 Token 提供给客户端使用
 
-#### 查看 Key 使用统计
+</details>
+
+<details>
+<summary><b>📊 查看 Key 使用统计</b></summary>
 
 1. 切换到 "统计分析" 标签
 2. 查看每个 Key 的详细统计：
@@ -231,6 +274,8 @@ user@test.com----pass456----session_data----ollama-def456...
    - 当前状态（active/disabled）
 3. 可手动启用/禁用 Key
 4. 运行批量健康检查
+
+</details>
 
 ### API 调用
 
@@ -289,7 +334,8 @@ curl https://ollama-api-pool.your-name.workers.dev/v1/chat/completions \
 
 ## 🛠️ 配置选项
 
-### wrangler.toml
+<details>
+<summary><b>📝 wrangler.toml 配置详解</b></summary>
 
 ```toml
 name = "ollama-api-pool"
@@ -305,22 +351,43 @@ binding = "ACCOUNTS"
 id = "your-accounts-kv-id"
 
 [vars]
-ADMIN_TOKEN = "your-admin-secret-token"  # 管理后台密钥
-ENABLE_ANALYTICS = "true"                # 启用统计
-REDIS_URL = "rediss://default:***@tidy-caribou-11305.upstash.io:6379"  # 可选：Redis 缓存与限流
-DATABASE_URL = "postgresql://postgres.inswmaagqjqgqxzxuxlp:***@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true"  # 可选：Supabase PostgreSQL
-SUPABASE_REST_URL = "https://inswmaagqjqgqxzxuxlp.supabase.co/rest/v1"  # 建议显式配置 REST 端点
-SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOi..."  # 必填：Supabase Service Role Key
+# 管理后台密钥（必须修改）
+ADMIN_TOKEN = "your-admin-secret-token"
+
+# 功能开关
+ENABLE_ANALYTICS = "true"        # 启用统计分析
+ENABLE_RATE_LIMIT = "true"       # 启用 IP 速率限制
+ENABLE_BOT_DETECTION = "true"    # 启用 Bot 检测
+DISABLE_KV_STORAGE = "true"      # 禁用 KV 写入，使用 Redis/Postgres
+
+# 速率限制配置
+RATE_LIMIT_REQUESTS = "60"       # 每个 IP 每分钟最大请求数
+RATE_LIMIT_WINDOW = "60"         # 时间窗口（秒）
+
+# 统计采样率（降低 KV 写入压力）
+STATS_SAMPLE_RATE = "0.1"        # 全局统计采样率（0.1 = 10%）
+MODEL_STATS_SAMPLE_RATE = "0.2"  # 模型统计采样率（0.2 = 20%）
+
+# 外部存储（可选但强烈推荐）
+REDIS_URL = "rediss://default:***@your-redis.upstash.io:6379"
+DATABASE_URL = "postgresql://postgres.***:***@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+SUPABASE_REST_URL = "https://your-project.supabase.co/rest/v1"
+SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOi..."
 ```
 
-> ✅ 推荐组合：**PostgreSQL（Supabase）+ Redis（Upstash）**。启用 `DATABASE_URL` 与 `REDIS_URL` 后，Worker 会优先使用数据库与缓存存储，Cloudflare KV 只作为回退通道，可稳定承载十万级账号池或高频调用。
+> ✅ **推荐配置**: PostgreSQL（Supabase）+ Redis（Upstash）+ Cloudflare KV
 
-### PostgreSQL（Supabase）集成
+</details>
 
-1. 在 Supabase 中创建数据库，并保证所有表名以 `ollama_api_` 开头；
-2. 建议使用如下最小表结构：
+<details>
+<summary><b>🗄️ PostgreSQL（Supabase）数据库集成</b></summary>
+
+### 创建数据库表
+
+1. 在 Supabase 项目中执行以下 SQL：
 
 ```sql
+-- API Keys 主表
 create table if not exists ollama_api_keys (
   api_key text primary key,
   username text,
@@ -332,6 +399,7 @@ create table if not exists ollama_api_keys (
   consecutive_failures integer default 0
 );
 
+-- API Keys 统计表
 create table if not exists ollama_api_key_stats (
   api_key text primary key references ollama_api_keys(api_key) on delete cascade,
   total_requests bigint default 0,
@@ -345,6 +413,7 @@ create table if not exists ollama_api_key_stats (
   created_at timestamptz default now()
 );
 
+-- 客户端 Tokens 表
 create table if not exists ollama_api_client_tokens (
   token text primary key,
   name text,
@@ -353,6 +422,7 @@ create table if not exists ollama_api_client_tokens (
   request_count bigint default 0
 );
 
+-- 全局统计表
 create table if not exists ollama_api_global_stats (
   id text primary key default 'global',
   total_requests bigint default 0,
@@ -360,11 +430,62 @@ create table if not exists ollama_api_global_stats (
   failure_count bigint default 0,
   updated_at timestamptz default now()
 );
+
+-- 模型统计表（支持多 Provider）
+create table if not exists ollama_api_model_stats (
+  id serial primary key,
+  provider text default 'ollama',
+  model text not null,
+  total_requests bigint default 0,
+  success_count bigint default 0,
+  failure_count bigint default 0,
+  last_used timestamptz,
+  created_at timestamptz default now(),
+  unique(provider, model)
+);
+
+-- 小时级模型统计（用于趋势图表）
+create table if not exists ollama_api_model_hourly (
+  id serial primary key,
+  provider text default 'ollama',
+  model text not null,
+  hour timestamptz not null,
+  requests bigint default 0,
+  success bigint default 0,
+  failure bigint default 0,
+  created_at timestamptz default now(),
+  unique(provider, model, hour)
+);
 ```
 
-3. 在 Supabase 项目设置中获取 `Service Role Key`，写入 `SUPABASE_SERVICE_ROLE_KEY`；
-4. 如果未填写 `SUPABASE_REST_URL`，Worker 会尝试根据 `DATABASE_URL` 自动推断，但显式设置更可靠；
-5. 部署后，API Key、客户端 Token 与统计将优先写入 PostgreSQL，KV 仅作为兜底。
+2. 在 Supabase 项目设置中获取：
+   - **Service Role Key** → `SUPABASE_SERVICE_ROLE_KEY`
+   - **REST URL** → `SUPABASE_REST_URL`
+   - **Connection String** → `DATABASE_URL`
+
+3. 将配置添加到 `wrangler.toml` 或 GitHub Secrets
+
+### OpenRouter 表结构
+
+如需支持 OpenRouter，添加前缀为 `openrouter_api_` 的表：
+
+```sql
+-- OpenRouter API Keys 表
+create table if not exists openrouter_api_keys (
+  api_key text primary key,
+  username text,
+  status text default 'active',
+  created_at timestamptz default now(),
+  expires_at timestamptz,
+  failed_until timestamptz,
+  disabled_until timestamptz,
+  consecutive_failures integer default 0
+);
+
+-- 其他表类似命名...
+```
+
+</details>
 
 ## 📚 文档
 
@@ -380,28 +501,52 @@ create table if not exists ollama_api_global_stats (
 
 ### 请求流程
 
-```
-客户端请求
-    ↓
-验证客户端 Token
-    ↓
-从池中获取下一个可用 API Key
-    ↓
-转发请求到 Ollama API
-    ↓
-检查响应状态
-    ↓ (成功)          ↓ (失败)
-返回结果        标记失败 → 重试
+```mermaid
+sequenceDiagram
+    participant C as 客户端
+    participant W as Workers
+    participant A as 鉴权模块
+    participant P as API 池
+    participant O as Ollama API
+    participant R as OpenRouter API
+
+    C->>W: HTTPS 请求
+    W->>A: 验证 Client Token
+    A-->>W: Token 有效
+    W->>P: 获取可用 API Key
+    P->>P: Round-robin 轮询
+
+    alt Ollama 请求
+        P->>O: 使用 API Key 转发
+        O-->>P: 响应
+    else OpenRouter 请求
+        P->>R: 使用 API Key 转发
+        R-->>P: 响应
+    end
+
+    alt 请求成功
+        P->>P: 记录成功统计
+        P-->>W: 返回结果
+    else 请求失败
+        P->>P: 标记失败 + 重试
+        P->>P: 连续失败 3 次自动禁用
+    end
+
+    W-->>C: 返回响应
 ```
 
-### Key 轮询策略
+<details>
+<summary><b>⚙️ Key 轮询策略</b></summary>
 
 - **轮询算法**: Round-robin 轮询
 - **失败标记**: API Key 失效后标记 1 小时
 - **自动恢复**: 1 小时后自动重新尝试
 - **最大重试**: 单次请求最多重试 3 次
 
-### 智能管理
+</details>
+
+<details>
+<summary><b>🤖 智能管理机制</b></summary>
 
 - **自动禁用**: 连续失败 3 次自动禁用 1 小时
 - **手动控制**: 支持手动启用/禁用任意 Key，可自定义禁用时长
@@ -413,7 +558,12 @@ create table if not exists ollama_api_global_stats (
   - 连续失败次数
   - 禁用原因（自动/手动）
 
+</details>
+
 ## 🔒 安全建议
+
+<details>
+<summary><b>🛡️ 安全最佳实践</b></summary>
 
 1. **保护管理员 Token**: 使用强随机密码
 2. **限制客户端 Token**: 为不同用户创建独立 Token
@@ -421,7 +571,12 @@ create table if not exists ollama_api_global_stats (
 4. **监控日志**: 定期检查统计信息
 5. **访问控制**: 限制管理后台访问 IP
 
+</details>
+
 ## 📝 开发
+
+<details>
+<summary><b>🔧 开发命令</b></summary>
 
 ### 本地测试
 
@@ -441,7 +596,12 @@ pnpm wrangler tail
 pnpm deploy
 ```
 
+</details>
+
 ## 🐛 故障排除
+
+<details>
+<summary><b>❓ 常见问题与解决方案</b></summary>
 
 ### API Key 频繁失效
 
@@ -468,7 +628,12 @@ curl https://ollama.com/v1/chat/completions \
 email----password----session----api_key
 ```
 
+</details>
+
 ## 📦 项目结构
+
+<details>
+<summary><b>📁 目录结构</b></summary>
 
 ```text
 ollama-api-pool/
@@ -484,6 +649,8 @@ ollama-api-pool/
 ├── package.json       # 依赖配置
 └── README.md          # 说明文档
 ```
+
+</details>
 
 ## 🤝 贡献
 
