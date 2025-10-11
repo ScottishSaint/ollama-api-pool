@@ -62,6 +62,8 @@ export default {
       } else if (path === '/api-docs') {
         // API 使用文档
         return handleStaticHtml('/api-docs.html');
+      } else if (path === '/api/test-templates') {
+        return jsonResponse({ templates: getTestTemplatesPayload() });
       } else if (path.startsWith('/js/')) {
         // 静态 JS 文件
         return handleStaticJs(path);
@@ -204,6 +206,83 @@ async function handleModels(request, env) {
     console.error('Models error:', error);
     return errorResponse(error.message, 500);
   }
+}
+
+function getTestTemplatesPayload() {
+  return [
+    {
+      id: 'ecommerce-support',
+      label: '电商客服',
+      description: '为大型电商平台提供售后咨询与物流跟踪答复。',
+      systemPrompt: '你是一名电商平台的资深智能客服，擅长定位物流状态、解释售后政策并安抚客户情绪，回答需清晰、礼貌且给出下一步指引。',
+      userMessage: '客户：我的订单 8923765 已经三天显示“运输中”没更新了，能帮我查查现在到哪了吗？',
+      temperature: 0.4,
+      stream: false
+    },
+    {
+      id: 'fintech-analyst',
+      label: '金融分析',
+      description: '面向互联网金融平台的投研解读与风险提示。',
+      systemPrompt: '你是一名互联网券商的策略分析师，要为普通投资者提供客观、审慎的趋势解读，并在必要时提示风险和免责声明。',
+      userMessage: '用户想了解：近期人工智能概念股持续走强，接下来一周可能的风险点有哪些？',
+      temperature: 0.35,
+      stream: false
+    },
+    {
+      id: 'telemedicine-assistant',
+      label: '互联网医疗',
+      description: '辅助在线问诊平台进行初步分诊与健康建议。',
+      systemPrompt: '你是一名互联网医疗平台的健康顾问，遵循“非诊断性建议”原则，需提醒用户线下就医并给出生活方式建议。',
+      userMessage: '患者：最近频繁熬夜后总觉得心悸、出汗，应该怎么调理？需要马上看医生吗？',
+      temperature: 0.3,
+      stream: false
+    },
+    {
+      id: 'edu-mentor',
+      label: '在线教育',
+      description: '帮助 K12 在线课堂的学习规划与知识点讲解。',
+      systemPrompt: '你是在线教育平台的学业导师，擅长将复杂知识拆解为步骤，鼓励学生积极思考。',
+      userMessage: '学生：物理中动量守恒定律怎么理解？能用生活中的例子讲讲吗？',
+      temperature: 0.5,
+      stream: false
+    },
+    {
+      id: 'marketing-planner',
+      label: '品牌营销',
+      description: '为新消费品牌生成社媒营销文案与活动创意。',
+      systemPrompt: '你是新消费品牌的营销策划，总结品牌卖点，并输出具有创意的短文案，语气亲和、有画面感。',
+      userMessage: '需求：围绕“零糖气泡水”设计三条适合小红书的推广短句，突出健康与夏日清爽感。',
+      temperature: 0.75,
+      stream: false
+    },
+    {
+      id: 'travel-planner',
+      label: '旅游行程',
+      description: '面向在线旅行平台提供个性化路线规划。',
+      systemPrompt: '你是在线旅行平台的行程规划师，需要根据用户画像提供兼顾预算与体验的计划，并附上交通提示。',
+      userMessage: '用户：计划五一三天去成都，预算中等，喜欢美食和小众博物馆，怎么安排比较好？',
+      temperature: 0.6,
+      stream: false
+    },
+    {
+      id: 'legal-brief',
+      label: '法律助手',
+      description: '服务合规平台的初步合同与权益解读。',
+      systemPrompt: '你是企业合规平台的法律顾问助手，需要用通俗语言解释合同条款，并提醒用户最终以专业律师意见为准。',
+      userMessage: '客户：给你一段竞业限制条款，帮我看看生效条件有哪些？',
+      temperature: 0.25,
+      stream: false
+    },
+    {
+      id: 'game-narrative',
+      label: '游戏剧情',
+      description: '面向游戏工作室的 NPC 剧情与任务脚本设计。',
+      systemPrompt: '你是一名 RPG 游戏的剧情策划，擅长塑造鲜明 NPC 和支线任务，语言富有感染力。',
+      userMessage: '需求：为“星港酒吧”的女调酒师 NPC 设计一段接任务对白，并描述玩家需要完成的任务目标。',
+      temperature: 0.8,
+      stream: true
+    }
+  ];
 }
 
 // 处理静态 JS 文件

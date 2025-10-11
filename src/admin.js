@@ -838,13 +838,13 @@ async function getPublicStats(env) {
       hourlyStats = await getHourlyStats(env, 24);
     }
 
-    // 获取最近1小时的Top3模型
+    // 获取最近24小时的Top3模型
     let recentTopModels = [];
     if (usePostgres) {
-      recentTopModels = await getRecentTopModelsFromPostgres(env, 1, 3);
+      recentTopModels = await getRecentTopModelsFromPostgres(env, 24, 3);
     }
     if (!recentTopModels.length) {
-      recentTopModels = await getRecentTopModels(env, 1, 3);
+      recentTopModels = await getRecentTopModels(env, 24, 3);
     }
 
     const generatedAt = new Date().toISOString();

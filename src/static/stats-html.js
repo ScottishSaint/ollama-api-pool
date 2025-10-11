@@ -8,38 +8,55 @@ export const statsHtml = `<!DOCTYPE html>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>实时统计 - Ollama API Pool</title>
+  <meta name="description" content="Ollama API Pool 公开展示请求趋势、模型热度与资源状态的实时统计面板，与登录页保持一致布局体验。">
+  <meta name="keywords" content="Ollama API Pool, 实时统计, 模型监控, 请求趋势, Cloudflare Workers">
+  <meta name="robots" content="index,follow">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#4f46e5',
+            accent: '#0ea5e9'
+          },
+          boxShadow: {
+            soft: '0 18px 40px -24px rgba(30, 41, 59, 0.35)'
+          }
+        }
+      }
+    }
+  </script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     body {
       font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #f5f7fb;
-      color: #1f2937;
     }
     .card {
       background: #ffffff;
       border: 1px solid rgba(15, 23, 42, 0.08);
-      border-radius: 12px;
-      box-shadow: 0 8px 16px rgba(15, 23, 42, 0.04);
+      border-radius: 18px;
+      box-shadow: 0 12px 32px -18px rgba(15, 23, 42, 0.25);
       transition: box-shadow 0.2s ease, transform 0.2s ease;
     }
     .card:hover {
-      box-shadow: 0 12px 20px rgba(15, 23, 42, 0.08);
+      box-shadow: 0 18px 40px -18px rgba(15, 23, 42, 0.35);
       transform: translateY(-1px);
     }
     .metric-card {
-      border: 1px solid rgba(15, 23, 42, 0.08);
-      border-radius: 12px;
-      background: linear-gradient(180deg, rgba(248, 250, 252, 0.9), #ffffff);
-      padding: 18px 20px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(248, 250, 252, 1), #ffffff);
+      padding: 20px 22px;
     }
     .skeleton {
-      border-radius: 12px;
-      background: linear-gradient(90deg, rgba(226, 232, 240, 0.2) 25%, rgba(226, 232, 240, 0.4) 37%, rgba(226, 232, 240, 0.2) 63%);
+      border-radius: 16px;
+      background: linear-gradient(90deg, rgba(226, 232, 240, 0.18) 25%, rgba(226, 232, 240, 0.36) 37%, rgba(226, 232, 240, 0.18) 63%);
       background-size: 400% 100%;
-      animation: shimmer 1.4s ease infinite;
+      animation: shimmer 1.2s ease infinite;
     }
     @keyframes shimmer {
       0% { background-position: 100% 0; }
@@ -47,41 +64,57 @@ export const statsHtml = `<!DOCTYPE html>
     }
     .empty-state {
       border: 1px dashed rgba(148, 163, 184, 0.5);
-      border-radius: 10px;
+      border-radius: 14px;
       padding: 32px 16px;
       text-align: center;
-      background: rgba(248, 250, 252, 0.8);
+      background: rgba(248, 250, 252, 0.9);
       color: #64748b;
       font-size: 0.9rem;
     }
   </style>
 </head>
-<body>
-  <div class="min-h-screen flex flex-col">
-    <header class="bg-white border-b border-slate-200">
-      <div class="max-w-6xl mx-auto px-6 py-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-        <div>
-          <h1 class="flex items-center gap-3 text-3xl font-semibold text-slate-900">
-            <span>实时监控中心</span>
-            <span id="storage-pill" class="hidden px-3 py-1 text-xs font-semibold rounded-full bg-slate-900 text-white"></span>
-          </h1>
-          <p class="mt-2 text-sm text-slate-500">
-            追踪 Ollama API Pool 的请求趋势、模型使用表现与关键资源状态。
-          </p>
+<body class="bg-slate-50 min-h-screen flex flex-col text-slate-800">
+  <header class="bg-white border-b border-slate-200/80">
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 py-4 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="rounded-xl bg-gradient-to-br from-primary to-accent text-white p-2.5">
+          <span class="text-2xl">📊</span>
         </div>
-        <div class="flex flex-wrap gap-3">
-          <button id="refresh-btn" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-900 rounded-full hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900">
-            🔄 手动刷新
-          </button>
-          <a href="/" class="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-full hover:bg-slate-50">管理后台</a>
-          <a href="/api-docs" class="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-full hover:bg-slate-50">API 文档</a>
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-[0.35em] text-primary">Ollama API Pool</p>
+          <h1 class="text-base sm:text-lg font-semibold text-slate-900">实时公开统计</h1>
         </div>
       </div>
-    </header>
+      <div class="hidden sm:flex items-center gap-3 text-sm">
+        <a href="/" class="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">登录后台</a>
+        <a href="/api-docs" class="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">API 文档</a>
+      </div>
+    </div>
+  </header>
 
-    <main class="flex-1">
-      <div class="max-w-6xl mx-auto px-6 py-8 space-y-8">
-        <!-- Skeleton -->
+  <main class="flex-1">
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 py-4 lg:py-6 space-y-8">
+      <section class="rounded-2xl border border-slate-200 bg-white p-6 lg:p-8 shadow-soft">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div>
+            <div class="flex items-center gap-3 text-3xl font-semibold text-slate-900">
+              <span>实时监控中心</span>
+              <span id="storage-pill" class="hidden px-3 py-1 text-xs font-semibold rounded-full bg-slate-900 text-white"></span>
+            </div>
+            <p class="mt-2 text-sm text-slate-500">
+              追踪 Ollama API Pool 的请求趋势、模型使用表现与关键资源状态。
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <button id="refresh-btn" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-900 rounded-full hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900">
+              🔄 手动刷新
+            </button>
+            <span class="text-xs text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-3 py-1">系统每 30 秒自动更新一次</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="space-y-8">
         <div id="skeleton-loader" class="space-y-6">
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="h-28 skeleton"></div>
@@ -96,7 +129,6 @@ export const statsHtml = `<!DOCTYPE html>
           <div class="h-52 skeleton"></div>
         </div>
 
-        <!-- Dashboard -->
         <div id="dashboard-content" class="hidden space-y-8">
           <section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <article class="metric-card">
@@ -148,12 +180,12 @@ export const statsHtml = `<!DOCTYPE html>
 
             <article class="card p-6">
               <div class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold text-slate-900">最近 1 小时热门模型</h2>
+                <h2 class="text-lg font-semibold text-slate-900">最近 24 小时热门模型</h2>
                 <span class="text-xs text-slate-400 border border-slate-200 rounded-full px-3 py-1">Top 3</span>
               </div>
               <div id="recent-top-models" class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm"></div>
               <div id="recent-top-models-empty" class="mt-6 empty-state hidden">
-                暂无近一小时数据
+                暂无近 24 小时数据
               </div>
             </article>
           </section>
@@ -206,20 +238,41 @@ export const statsHtml = `<!DOCTYPE html>
             自动刷新频率：30 秒 · 最后更新：<span id="footer-last-update" class="text-slate-600 font-medium">--</span>
           </p>
         </div>
-      </div>
-    </main>
+      </section>
+    </div>
+  </main>
 
-    <footer class="bg-white border-t border-slate-200">
-      <div class="max-w-6xl mx-auto px-6 py-6 text-xs text-slate-400 flex flex-col sm:flex-row justify-between gap-2">
-        <span>© ${new Date().getFullYear()} Ollama API Pool</span>
-        <span>Made with ❤️ by dext7r</span>
-      </div>
-    </footer>
-  </div>
+  <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 space-y-2 z-50 pointer-events-none"></div>
 
-  <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 space-y-2 z-50"></div>
+  <footer class="mt-auto bg-white border-t border-slate-200">
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-slate-500">
+        <div class="flex items-center gap-1 sm:gap-2">
+          <span>当前时间: <span id="footer-time" class="font-medium text-slate-700"></span></span>
+          <span class="hidden sm:inline text-slate-300">·</span>
+          <span>构建时间: <span id="build-time" class="font-medium text-slate-700">{{BUILD_TIME}}</span></span>
+        </div>
+        <div class="flex items-center gap-1 sm:gap-2">
+          <span>首次运行: <span id="project-launch-date" class="font-medium text-slate-700">2025-10-09</span></span>
+          <span class="hidden sm:inline text-slate-300">·</span>
+          <span>已稳定运行 <span id="project-runtime" class="font-medium text-slate-700">--</span></span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="https://github.com/dext7r/ollama-api-pool" target="_blank" rel="noopener" class="flex items-center gap-1 hover:text-primary transition-colors">
+          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+      <div class="italic text-slate-400 tracking-wide">欲买桂花同载酒，终不似，少年游</div>
+    </div>
+  </footer>
 
   <script>
+    const PROJECT_START_DISPLAY = '2025-10-09';
+    const PROJECT_START_DATE = new Date('2025-10-09T00:00:00+08:00');
     const REFRESH_INTERVAL = 30000;
     const state = {
       trendChart: null,
@@ -230,6 +283,38 @@ export const statsHtml = `<!DOCTYPE html>
 
     const numberFormatter = new Intl.NumberFormat('zh-CN');
     const percentFormatter = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    function updateFooterTime() {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const timeStr = year + '年' + month + '月' + day + '日 ' + hours + ':' + minutes + ':' + seconds;
+
+      const footerTime = document.getElementById('footer-time');
+      if (footerTime) footerTime.textContent = timeStr;
+
+      if (!Number.isNaN(PROJECT_START_DATE.getTime())) {
+        let diffMs = now.getTime() - PROJECT_START_DATE.getTime();
+        if (diffMs < 0) diffMs = 0;
+
+        const totalMinutes = Math.floor(diffMs / 60000);
+        const days = Math.floor(totalMinutes / 1440);
+        const hoursDiff = Math.floor((totalMinutes % 1440) / 60);
+        const minutesDiff = totalMinutes % 60;
+
+        const launchEl = document.getElementById('project-launch-date');
+        if (launchEl) launchEl.textContent = PROJECT_START_DISPLAY;
+        const runtimeEl = document.getElementById('project-runtime');
+        if (runtimeEl) runtimeEl.textContent = days + ' 天 ' + hoursDiff + ' 小时 ' + minutesDiff + ' 分钟';
+      }
+    }
+
+    updateFooterTime();
+    setInterval(updateFooterTime, 1000);
 
     function toggleSkeleton(show) {
       if (show) {
@@ -253,8 +338,15 @@ export const statsHtml = `<!DOCTYPE html>
           \${message}
         </div>
       \`);
-      $('#toast-container').append(toast);
-      setTimeout(() => toast.fadeOut(300, () => toast.remove()), 2200);
+      const container = $('#toast-container');
+      container.removeClass('pointer-events-none');
+      container.append(toast);
+      setTimeout(() => toast.fadeOut(300, () => {
+        toast.remove();
+        if (!container.children().length) {
+          container.addClass('pointer-events-none');
+        }
+      }), 2200);
     }
 
     function formatNumber(value) {
