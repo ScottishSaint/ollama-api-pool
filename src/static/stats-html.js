@@ -116,6 +116,16 @@ export const statsHtml = `<!DOCTYPE html>
 
       <section class="space-y-8">
         <div id="skeleton-loader" class="space-y-6">
+          <div class="rounded-2xl border border-slate-200 bg-white p-6 text-center">
+            <div class="inline-flex items-center gap-3 text-slate-600">
+              <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span id="loading-text" class="text-sm font-medium">正在加载统计数据...</span>
+            </div>
+            <p class="mt-2 text-xs text-slate-400">首次加载可能需要 5-15 秒，请耐心等待</p>
+          </div>
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="h-28 skeleton"></div>
             <div class="h-28 skeleton"></div>
@@ -274,11 +284,13 @@ export const statsHtml = `<!DOCTYPE html>
     const PROJECT_START_DISPLAY = '2025-10-09';
     const PROJECT_START_DATE = new Date('2025-10-09T00:00:00+08:00');
     const REFRESH_INTERVAL = 30000;
+    const MANUAL_REFRESH_COOLDOWN = 30000; // 手动刷新冷却时间 30 秒
     const state = {
       trendChart: null,
       modelsChart: null,
       timer: null,
-      loaded: false
+      loaded: false,
+      lastManualRefresh: 0
     };
 
     const numberFormatter = new Intl.NumberFormat('zh-CN');
@@ -332,7 +344,9 @@ export const statsHtml = `<!DOCTYPE html>
         ? 'bg-emerald-500 text-white'
         : type === 'error'
           ? 'bg-red-500 text-white'
-          : 'bg-slate-900 text-white';
+          : type === 'warning'
+            ? 'bg-amber-500 text-white'
+            : 'bg-slate-900 text-white';
       const toast = $(\`
         <div id="\${id}" class="\${baseClass} px-4 py-2 text-sm font-medium rounded-full shadow-lg">
           \${message}
@@ -365,17 +379,45 @@ export const statsHtml = `<!DOCTYPE html>
           toggleSkeleton(true);
         }
 
-        const response = await fetch('/admin/public-stats', { headers: { 'Cache-Control': 'no-store' } });
+        const startTime = Date.now();
+        let loadingTextTimer = null;
+
+        // 5秒后更新加载提示
+        loadingTextTimer = setTimeout(() => {
+          const loadingText = document.getElementById('loading-text');
+          if (loadingText) {
+            loadingText.textContent = '数据量较大，正在聚合中...';
+          }
+        }, 5000);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000); // 20秒超时
+
+        const response = await fetch('/admin/public-stats', {
+          headers: { 'Cache-Control': 'no-store' },
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        clearTimeout(loadingTextTimer);
+
         if (!response.ok) {
           throw new Error('HTTP ' + response.status);
         }
 
         const data = await response.json();
+        const loadTime = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(\`统计数据加载完成，耗时 \${loadTime} 秒\`);
+
         renderDashboard(data);
         state.loaded = true;
       } catch (error) {
-        console.error('统计数据加载失败:', error);
-        showToast('统计数据加载失败', 'error');
+        if (error.name === 'AbortError') {
+          console.error('统计数据加载超时');
+          showToast('加载超时（>20秒），请稍后重试或联系管理员', 'error');
+        } else {
+          console.error('统计数据加载失败:', error);
+          showToast('统计数据加载失败', 'error');
+        }
       } finally {
         toggleSkeleton(false);
       }
@@ -631,8 +673,35 @@ export const statsHtml = `<!DOCTYPE html>
       state.timer = setInterval(() => fetchStats(false), REFRESH_INTERVAL);
 
       $('#refresh-btn').on('click', () => {
+        const now = Date.now();
+        const timeSinceLastRefresh = now - state.lastManualRefresh;
+
+        if (timeSinceLastRefresh < MANUAL_REFRESH_COOLDOWN) {
+          const remainingSeconds = Math.ceil((MANUAL_REFRESH_COOLDOWN - timeSinceLastRefresh) / 1000);
+          showToast(\`请等待 \${remainingSeconds} 秒后再刷新\`, 'warning');
+          return;
+        }
+
+        state.lastManualRefresh = now;
         fetchStats(true);
         showToast('正在刷新', 'success');
+
+        // 添加冷却视觉效果
+        const btn = $('#refresh-btn');
+        btn.prop('disabled', true).addClass('opacity-50 cursor-not-allowed');
+
+        let countdown = Math.floor(MANUAL_REFRESH_COOLDOWN / 1000);
+        const originalText = btn.text();
+
+        const countdownTimer = setInterval(() => {
+          countdown--;
+          if (countdown > 0) {
+            btn.text(\`🔄 冷却中 (\${countdown}s)\`);
+          } else {
+            clearInterval(countdownTimer);
+            btn.text(originalText).prop('disabled', false).removeClass('opacity-50 cursor-not-allowed');
+          }
+        }, 1000);
       });
 
       $(window).on('beforeunload', () => {
