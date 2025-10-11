@@ -8,7 +8,7 @@ export const dashboardHtml = `<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ollama API Pool 管理中心</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://proxy.jhun.edu.kg/proxy/cdn.tailwindcss.com/"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script>
         tailwind.config = {
@@ -23,7 +23,7 @@ export const dashboardHtml = `<!DOCTYPE html>
         }
     </script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://proxy.jhun.edu.kg/proxy/fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; }
         .card-shadow { box-shadow: 0 20px 40px -24px rgba(15, 23, 42, 0.35); }
         .soft-border { border: 1px solid rgba(148, 163, 184, 0.2); }

@@ -11,10 +11,10 @@ export const statsHtml = `<!DOCTYPE html>
   <meta name="description" content="Ollama API Pool 公开展示请求趋势、模型热度与资源状态的实时统计面板，与登录页保持一致布局体验。">
   <meta name="keywords" content="Ollama API Pool, 实时统计, 模型监控, 请求趋势, Cloudflare Workers">
   <meta name="robots" content="index,follow">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <script src="https://proxy.jhun.edu.kg/proxy/cdn.tailwindcss.com/"></script>
+  <script src="https://proxy.jhun.edu.kg/proxy/cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <script src="https://proxy.jhun.edu.kg/proxy/cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://proxy.jhun.edu.kg/proxy/cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -31,7 +31,7 @@ export const statsHtml = `<!DOCTYPE html>
     }
   </script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://proxy.jhun.edu.kg/proxy/fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     body {
       font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
@@ -75,7 +75,7 @@ export const statsHtml = `<!DOCTYPE html>
 </head>
 <body class="bg-slate-50 min-h-screen flex flex-col text-slate-800">
   <header class="bg-white border-b border-slate-200/80">
-    <div class="max-w-7xl mx-auto px-5 sm:px-8 py-4 flex items-center justify-between gap-4">
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
       <div class="flex items-center gap-3">
         <div class="rounded-xl bg-gradient-to-br from-primary to-accent text-white p-2.5">
           <span class="text-2xl">📊</span>
@@ -85,9 +85,9 @@ export const statsHtml = `<!DOCTYPE html>
           <h1 class="text-base sm:text-lg font-semibold text-slate-900">实时公开统计</h1>
         </div>
       </div>
-      <div class="hidden sm:flex items-center gap-3 text-sm">
-        <a href="/" class="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">登录后台</a>
-        <a href="/api-docs" class="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">API 文档</a>
+      <div class="flex w-full sm:w-auto flex-wrap items-center justify-start sm:justify-end gap-2 sm:gap-3 text-xs sm:text-sm">
+        <a href="/" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">登录后台</a>
+        <a href="/api-docs" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">API 文档</a>
       </div>
     </div>
   </header>

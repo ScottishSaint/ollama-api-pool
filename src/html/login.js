@@ -11,8 +11,8 @@ export const loginHtml = `<!DOCTYPE html>
     <meta name="description" content="Ollama API Pool 管理控制台登录入口，集中管理多账户代理池，实现负载均衡、故障转移与统一鉴权。">
     <meta name="keywords" content="Ollama API Pool, API 代理池, 多账号管理, 负载均衡, Cloudflare Workers, 鉴权, 统计分析">
     <meta name="robots" content="index,follow">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://proxy.jhun.edu.kg/proxy/cdn.tailwindcss.com/"></script>
+    <script src="https://proxy.jhun.edu.kg/proxy/code.jquery.com/jquery-3.7.1.min.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -29,13 +29,13 @@ export const loginHtml = `<!DOCTYPE html>
         }
     </script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://proxy.jhun.edu.kg/proxy/fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen flex flex-col text-slate-800">
     <header class="bg-white border-b border-slate-200/80">
-        <div class="max-w-7xl mx-auto px-5 sm:px-8 py-4 flex items-center justify-between gap-4">
+        <div class="max-w-7xl mx-auto px-5 sm:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
             <div class="flex items-center gap-3">
                 <div class="rounded-xl bg-gradient-to-br from-primary to-accent text-white p-2.5">
                     <span class="text-2xl">🔐</span>
@@ -45,9 +45,13 @@ export const loginHtml = `<!DOCTYPE html>
                     <h1 class="text-base sm:text-lg font-semibold text-slate-900">管理控制台登录</h1>
                 </div>
             </div>
-            <div class="hidden sm:flex items-center gap-3 text-sm">
-                <a href="/api-docs" class="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">API 文档</a>
-                <a href="/stats" class="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">公开统计</a>
+            <div class="flex w-full sm:w-auto flex-wrap items-center justify-start sm:justify-end gap-2 sm:gap-3 text-xs sm:text-sm">
+                <a href="/api-docs" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
+                    API 文档
+                </a>
+                <a href="/stats" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
+                    公开统计
+                </a>
             </div>
         </div>
     </header>

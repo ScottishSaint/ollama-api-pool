@@ -7,8 +7,8 @@ export const apiDocsHtml = `<!DOCTYPE html>
     <meta name="description" content="Ollama API Pool 公开 API 文档、请求示例与在线调试工具，帮助团队快速集成代理服务。">
     <meta name="keywords" content="Ollama API Pool, API 文档, 公开统计, Cloudflare Workers, 代理池, 统一鉴权">
     <meta name="robots" content="index,follow">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://proxy.jhun.edu.kg/proxy/cdn.tailwindcss.com/"></script>
+    <script src="https://proxy.jhun.edu.kg/proxy/code.jquery.com/jquery-3.7.1.min.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -25,7 +25,7 @@ export const apiDocsHtml = `<!DOCTYPE html>
         }
     </script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://proxy.jhun.edu.kg/proxy/fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; }
         .code-block {
             position: relative;
@@ -37,6 +37,7 @@ export const apiDocsHtml = `<!DOCTYPE html>
             font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
             font-size: 0.85rem;
             box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+            -webkit-overflow-scrolling: touch;
         }
         .code-block pre { margin: 0; white-space: pre; }
         .copy-btn {
@@ -66,11 +67,27 @@ export const apiDocsHtml = `<!DOCTYPE html>
             background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(14, 165, 233, 0.08));
             border: 1px solid rgba(79, 70, 229, 0.1);
         }
+        @media (max-width: 640px) {
+            .code-block {
+                font-size: 0.78rem;
+                padding: 0.85rem 1rem;
+                border-radius: 0.65rem;
+            }
+            .code-block pre {
+                white-space: pre-wrap;
+                word-break: break-word;
+            }
+            .copy-btn {
+                top: 0.5rem;
+                right: 0.5rem;
+                font-size: 0.7rem;
+            }
+        }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen flex flex-col text-slate-800">
     <header class="bg-white border-b border-slate-200/80">
-        <div class="max-w-7xl mx-auto px-5 sm:px-8 py-4 flex items-center justify-between gap-4">
+        <div class="max-w-7xl mx-auto px-5 sm:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
             <div class="flex items-center gap-3">
                 <div class="rounded-xl bg-gradient-to-br from-primary to-accent text-white p-2.5">
                     <span class="text-2xl">📚</span>
@@ -80,9 +97,13 @@ export const apiDocsHtml = `<!DOCTYPE html>
                     <h1 class="text-base sm:text-lg font-semibold text-slate-900">API 文档与调试中心</h1>
                 </div>
             </div>
-            <div class="hidden sm:flex items-center gap-3 text-sm">
-                <a href="/" class="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">登录后台</a>
-                <a href="/stats" class="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">公开统计</a>
+            <div class="flex w-full sm:w-auto flex-wrap items-center justify-start sm:justify-end gap-2 sm:gap-3 text-xs sm:text-sm">
+                <a href="/" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
+                    登录后台
+                </a>
+                <a href="/stats" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
+                    公开统计
+                </a>
             </div>
         </div>
     </header>
