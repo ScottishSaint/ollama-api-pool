@@ -1,0 +1,134 @@
+name: API 接口测试
+
+on:
+  push:
+    branches:
+      - main
+      - openrouter
+  pull_request:
+    branches:
+      - main
+      - openrouter
+  workflow_dispatch:
+  schedule:
+    # 每天 UTC 时间 00:00 运行（北京时间 08:00）
+    - cron: '0 0 * * *'
+
+jobs:
+  api-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: 📦 Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 🔧 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 🧪 运行 API 测试
+        id: run-test
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL || 'https://ollama-api-pool.h7ml.workers.dev' }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+          GITHUB_OUTPUT: true
+        run: |
+          echo "开始运行 API 测试..."
+          node scripts/api-test.js || echo "test_failed=true" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: 📊 读取测试报告
+        id: read-report
+        run: |
+          if [ -f test-report.md ]; then
+            echo "报告文件存在，读取内容..."
+            # 将多行内容写入 GITHUB_OUTPUT
+            echo "report<<EOF" >> $GITHUB_OUTPUT
+            cat test-report.md >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "报告文件不存在，生成默认报告..."
+            echo "report<<EOF" >> $GITHUB_OUTPUT
+            echo "## ❌ API 接口测试失败" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "测试脚本执行失败，未生成测试报告。请检查日志。" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 💬 评论到 PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const report = `${{ steps.read-report.outputs.report }}`;
+
+            // 查找已存在的评论
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.data.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('API 接口测试报告')
+            );
+
+            if (botComment) {
+              // 更新已存在的评论
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: report
+              });
+            } else {
+              // 创建新评论
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: report
+              });
+            }
+
+      - name: 💬 评论到 Commit
+        if: github.event_name == 'push'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const report = `${{ steps.read-report.outputs.report }}`;
+
+            try {
+              await github.rest.repos.createCommitComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+                body: report
+              });
+              console.log('✓ 测试报告已添加到 commit 评论');
+            } catch (error) {
+              console.error('创建 commit 评论失败:', error);
+            }
+
+      - name: 📤 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-report-${{ github.run_number }}
+          path: test-report.md
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: ✅ 检查测试结果
+        if: steps.run-test.outputs.test_failed == 'true'
+        run: |
+          echo "::error::API 测试失败，请查看测试报告"
+          exit 1
