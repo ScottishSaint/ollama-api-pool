@@ -928,7 +928,7 @@ export async function pgGetModelHourlyAggregated(env, { hours = 24 } = {}) {
     table: 'ollama_api_model_hourly',
     query: {
       select: 'hour,sum_requests:sum(requests),sum_success:sum(success),sum_failure:sum(failure)',
-      hour: `gte.${startHour}`,
+      and: `(gte.hour.${startHour})`,
       group: 'hour',
       order: 'hour.asc'
     }
@@ -946,7 +946,7 @@ export async function pgGetRecentTopModels(env, { hours = 1, limit = 3 } = {}) {
     table: 'ollama_api_model_hourly',
     query: {
       select: 'model,sum_requests:sum(requests),sum_success:sum(success),sum_failure:sum(failure)',
-      hour: `gte.${startHour}`,
+      and: `(gte.hour.${startHour})`,
       group: 'model',
       order: 'sum_requests.desc',
       limit: String(limit)
