@@ -18,6 +18,11 @@ import { getCachedModels, setCachedModels } from './cache';
 import { countApiKeys, getNextApiKey } from './keyManager';
 import { verifyClientToken } from './auth';
 import { normalizeProvider, getProviderConfig, buildUpstreamHeaders } from './providers';
+import { logoSvg, faviconSvg } from './static/assets';
+
+const GITHUB_REPO = 'dext7r/ollama-api-pool';
+const PROJECT_META_CACHE_TTL = 5 * 60 * 1000;
+let projectMetaCache = { data: null, fetched: 0 };
 
 export default {
   async fetch(request, env, ctx) {
@@ -65,11 +70,30 @@ export default {
       } else if (path === '/api-docs') {
         // API 使用文档
         return handleStaticHtml('/api-docs.html');
+      } else if (path === '/project') {
+        // 项目介绍页面
+        return handleStaticHtml('/project.html');
+      } else if (path === '/project/meta') {
+        return handleProjectMeta();
       } else if (path === '/api/test-templates') {
         return jsonResponse({ templates: getTestTemplatesPayload() });
       } else if (path.startsWith('/js/')) {
         // 静态 JS 文件
         return handleStaticJs(path);
+      } else if (path === '/favicon.svg' || path === '/favicon.ico') {
+        return new Response(faviconSvg, {
+          headers: {
+            'Content-Type': 'image/svg+xml',
+            'Cache-Control': 'public, max-age=86400'
+          }
+        });
+      } else if (path === '/logo.svg') {
+        return new Response(logoSvg, {
+          headers: {
+            'Content-Type': 'image/svg+xml',
+            'Cache-Control': 'public, max-age=86400'
+          }
+        });
       } else if (path.startsWith('/admin/')) {
         // 管理 API
         return handleAdmin(request, env);
@@ -124,6 +148,75 @@ export default {
     }
   }
 };
+
+async function handleProjectMeta() {
+  const now = Date.now();
+  if (projectMetaCache.data && now - projectMetaCache.fetched < PROJECT_META_CACHE_TTL) {
+    return jsonResponse({ ...projectMetaCache.data, cached: true });
+  }
+
+  try {
+    const baseHeaders = {
+      'User-Agent': 'ollama-api-pool-worker',
+      Accept: 'application/vnd.github+json'
+    };
+
+    const infoResponse = await fetch(`https://api.github.com/repos/${GITHUB_REPO}`, {
+      headers: baseHeaders
+    });
+
+    const tagsResponse = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/tags?per_page=5`, {
+      headers: baseHeaders
+    });
+
+    const infoRaw = infoResponse.ok ? await infoResponse.json() : null;
+    let tags = [];
+
+    if (tagsResponse.ok) {
+      const raw = await tagsResponse.json();
+      if (Array.isArray(raw)) {
+        tags = raw.slice(0, 5).map(tag => {
+          const tagName = tag?.name || '';
+          const commitSha = tag?.commit?.sha || '';
+          return {
+            name: tagName,
+            sha: commitSha ? commitSha.slice(0, 7) : '',
+            commit_sha: commitSha,
+            url: tagName ? `https://github.com/${GITHUB_REPO}/releases/tag/${encodeURIComponent(tagName)}` : '',
+            commit_url: commitSha ? `https://github.com/${GITHUB_REPO}/commit/${commitSha}` : ''
+          };
+        });
+      }
+    }
+
+    const sanitizedInfo = infoRaw
+      ? {
+          full_name: infoRaw.full_name || GITHUB_REPO,
+          default_branch: infoRaw.default_branch || 'main',
+          stargazers_count: infoRaw.stargazers_count || 0,
+          forks_count: infoRaw.forks_count || 0,
+          open_issues_count: infoRaw.open_issues_count || 0,
+          pushed_at: infoRaw.pushed_at || null
+        }
+      : null;
+
+    const record = {
+      info: sanitizedInfo,
+      tags,
+      fetched_at: new Date(now).toISOString()
+    };
+
+    projectMetaCache = { data: record, fetched: now };
+
+    return jsonResponse({ ...record, cached: false });
+  } catch (error) {
+    console.error('Project meta fetch failed:', error);
+    if (projectMetaCache.data) {
+      return jsonResponse({ ...projectMetaCache.data, cached: true });
+    }
+    return errorResponse('Failed to load project metadata', 502);
+  }
+}
 
 // 检查是否有可用的 API Keys
 async function checkHasApiKeys(env, provider = 'ollama') {
@@ -327,6 +420,14 @@ async function handleStaticJs(path) {
         'Cache-Control': 'public, max-age=3600'
       }
     });
+  } else if (cleanPath === '/js/project.js') {
+    const { projectJs } = await import('./static/project-js');
+    return new Response(projectJs, {
+      headers: {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'public, max-age=1800'
+      }
+    });
   }
 
   return errorResponse('Not Found', 404);
@@ -355,6 +456,15 @@ async function handleStaticHtml(path) {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'public, max-age=300'
+      }
+    });
+  } else if (path === '/project.html') {
+    const { projectHtml } = await import('./static/project-html');
+
+    return new Response(projectHtml, {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=600'
       }
     });
   }

@@ -7,9 +7,23 @@ export const loginHtml = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ollama API Pool 管理登录</title>
-    <meta name="description" content="Ollama API Pool 管理控制台登录入口，集中管理多账户代理池，实现负载均衡、故障转移与统一鉴权。">
-    <meta name="keywords" content="Ollama API Pool, API 代理池, 多账号管理, 负载均衡, Cloudflare Workers, 鉴权, 统计分析">
+    <title>Ollama / OpenRouter API Pool 管理登录</title>
+    <meta name="description" content="登录 Ollama / OpenRouter API Pool 管理后台，集中管理多 Provider 代理池，实现负载均衡、统一鉴权与实时统计。">
+    <meta name="keywords" content="Ollama API Pool, OpenRouter, 多 Provider, API 代理池, Cloudflare Workers, 统一鉴权, 负载均衡, PostgreSQL, Redis">
+    <link rel="canonical" href="https://ollama-api-pool.h7ml.workers.dev/dashboard">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="mask-icon" href="/favicon.svg" color="#4f46e5">
+    <link rel="apple-touch-icon" href="/favicon.svg">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Ollama / OpenRouter API Pool">
+    <meta property="og:title" content="登录 Ollama / OpenRouter API Pool 管理后台">
+    <meta property="og:description" content="多 Provider 统一代理池：账号轮询、健康巡检、客户端 Token 与实时统计，一站式完成。">
+    <meta property="og:url" content="https://ollama-api-pool.h7ml.workers.dev/dashboard">
+    <meta property="og:image" content="https://ollama-api-pool.h7ml.workers.dev/logo.svg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Ollama / OpenRouter API Pool 管理后台">
+    <meta name="twitter:description" content="集中管理多 Provider API 账号，支持 PostgreSQL 与 Redis，提供实时统计与鉴权。">
+    <meta name="twitter:image" content="https://ollama-api-pool.h7ml.workers.dev/logo.svg">
     <meta name="robots" content="index,follow">
     <script src="https://proxy.jhun.edu.kg/proxy/cdn.tailwindcss.com/"></script>
     <script src="https://proxy.jhun.edu.kg/proxy/code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -36,21 +50,24 @@ export const loginHtml = `<!DOCTYPE html>
 <body class="bg-slate-50 min-h-screen flex flex-col text-slate-800">
     <header class="bg-white border-b border-slate-200/80">
         <div class="max-w-7xl mx-auto px-5 sm:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-            <div class="flex items-center gap-3">
+            <a href="/dashboard" class="flex items-center gap-3 text-slate-900 no-underline hover:text-primary transition-colors">
                 <div class="rounded-xl bg-gradient-to-br from-primary to-accent text-white p-2.5">
                     <span class="text-2xl">🔐</span>
                 </div>
                 <div>
                     <p class="text-xs font-semibold uppercase tracking-[0.35em] text-primary">Ollama API Pool</p>
-                    <h1 class="text-base sm:text-lg font-semibold text-slate-900">管理控制台登录</h1>
+                    <h1 class="text-base sm:text-lg font-semibold">管理控制台登录</h1>
                 </div>
-            </div>
+            </a>
             <div class="flex w-full sm:w-auto flex-wrap items-center justify-start sm:justify-end gap-2 sm:gap-3 text-xs sm:text-sm">
-                <a href="/api-docs" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
-                    API 文档
+                <a href="/project" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-primary/20 text-primary hover:bg-primary/10 transition-colors flex items-center gap-2">
+                    🧾 <span>项目介绍</span>
                 </a>
-                <a href="/stats" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
-                    公开统计
+                <a href="/api-docs" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors flex items-center gap-1">
+                    📖 <span>API 文档</span>
+                </a>
+                <a href="/stats" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors flex items-center gap-1">
+                    📊 <span>公开统计</span>
                 </a>
             </div>
         </div>
@@ -61,29 +78,29 @@ export const loginHtml = `<!DOCTYPE html>
             <div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
                 <section class="space-y-8">
                     <div class="space-y-5">
-                        <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">统一代理池 · 运维总览</span>
-                        <h2 class="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">进入后台，维护高可用的 Ollama API 代理服务</h2>
+                        <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">多 Provider · 统一管控</span>
+                        <h2 class="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">进入后台，维护高可用的 Ollama / OpenRouter 代理池</h2>
                         <p class="text-sm sm:text-base leading-relaxed text-slate-600 max-w-3xl">
-                            从这里登录即可集中管理所有 Ollama 账号：批量导入与验证 API Key、签发客户端 Token、实时掌握请求统计与成功率，并支持 PostgreSQL + Redis 作为主存储，避免 KV 写入瓶颈。
+                            登录后即可集中运营多 Provider 账号：支持批量导入、健康巡检、客户端 Token 管理与实时统计，结合 PostgreSQL、Redis 与 Cloudflare Workers，构建高可用且可观测的 API 基础设施。
                         </p>
                     </div>
 
                     <div class="grid sm:grid-cols-2 gap-4 lg:gap-5">
                         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
-                            <h3 class="text-sm font-semibold text-slate-900">🔄 负载均衡调度</h3>
-                            <p class="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">多 Key 轮询调度，故障即刻切换，持续保证接口可用。</p>
+                            <h3 class="text-sm font-semibold text-slate-900">🔄 多 Provider 调度</h3>
+                            <p class="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">同时支持 Ollama 与 OpenRouter，自动轮询账号并故障转移，保障调用链稳定。</p>
                         </article>
                         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
                             <h3 class="text-sm font-semibold text-slate-900">🛡️ 鉴权隔离</h3>
-                            <p class="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">客户端仅持 Token，真实上游密钥留存在池内，降低泄露风险。</p>
+                            <p class="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">客户端仅持 Token，真实上游密钥保存在池内，结合多级限流策略降低泄露与滥用风险。</p>
                         </article>
                         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
                             <h3 class="text-sm font-semibold text-slate-900">📊 秒级统计</h3>
-                            <p class="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">成功率、请求量与 Key 健康度 10 秒刷新一次，快速洞察异常。</p>
+                            <p class="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">成功率、请求量与 Key 健康度 10 秒刷新一次，并可对外公开展示池子运行状况。</p>
                         </article>
                         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
-                            <h3 class="text-sm font-semibold text-slate-900">🧩 自持部署</h3>
-                            <p class="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">Cloudflare Workers 托管，配合 PostgreSQL 与 Redis，按需扩展。</p>
+                            <h3 class="text-sm font-semibold text-slate-900">🗄️ 多层存储</h3>
+                            <p class="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">灵活接入 PostgreSQL、Redis 与 Cloudflare KV，实现账号、统计与缓存的可靠持久化。</p>
                         </article>
                     </div>
                 </section>
@@ -176,6 +193,8 @@ export const loginHtml = `<!DOCTYPE html>
         </div>
     </footer>
 
+    <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
+    <script>LA.init({id:"Ky3jFxCaiJ9zgtRy",ck:"Ky3jFxCaiJ9zgtRy",autoTrack:true,hashMode:true,screenRecord:true});</script>
     <script src="/js/login.js?v=5"></script>
 </body>
 </html>`;

@@ -3,10 +3,24 @@ export const apiDocsHtml = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ollama API Pool - API 文档与调试中心</title>
-    <meta name="description" content="Ollama API Pool 公开 API 文档、请求示例与在线调试工具，帮助团队快速集成代理服务。">
-    <meta name="keywords" content="Ollama API Pool, API 文档, 公开统计, Cloudflare Workers, 代理池, 统一鉴权">
+    <title>Ollama / OpenRouter API Pool - API 文档与调试中心</title>
+    <meta name="description" content="查阅 Ollama / OpenRouter API Pool 的完整接口文档、示例与调试工具，快速集成多 Provider 代理池。">
+    <meta name="keywords" content="Ollama API Pool, OpenRouter, API 文档, Cloudflare Workers, 代理池, 多 Provider, 在线调试, 统一鉴权">
     <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://ollama-api-pool.h7ml.workers.dev/api-docs">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="mask-icon" href="/favicon.svg" color="#4f46e5">
+    <link rel="apple-touch-icon" href="/favicon.svg">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Ollama / OpenRouter API Pool">
+    <meta property="og:title" content="API 文档 · Ollama / OpenRouter API Pool">
+    <meta property="og:description" content="统一查看多 Provider API 使用说明、示例与在线调试工具，快速集成代理池。">
+    <meta property="og:url" content="https://ollama-api-pool.h7ml.workers.dev/api-docs">
+    <meta property="og:image" content="https://ollama-api-pool.h7ml.workers.dev/logo.svg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="API 文档 · Ollama / OpenRouter API Pool">
+    <meta name="twitter:description" content="多 Provider API 示例、调试与最佳实践，一站式查看。">
+    <meta name="twitter:image" content="https://ollama-api-pool.h7ml.workers.dev/logo.svg">
     <script src="https://proxy.jhun.edu.kg/proxy/cdn.tailwindcss.com/"></script>
     <script src="https://proxy.jhun.edu.kg/proxy/code.jquery.com/jquery-3.7.1.min.js"></script>
     <script>
@@ -87,23 +101,21 @@ export const apiDocsHtml = `<!DOCTYPE html>
 </head>
 <body class="bg-slate-50 min-h-screen flex flex-col text-slate-800">
     <header class="bg-white border-b border-slate-200/80">
-        <div class="max-w-7xl mx-auto px-5 sm:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-            <div class="flex items-center gap-3">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <a href="/dashboard" class="flex items-center gap-3 text-slate-900 no-underline hover:text-primary transition-colors">
                 <div class="rounded-xl bg-gradient-to-br from-primary to-accent text-white p-2.5">
-                    <span class="text-2xl">📚</span>
+                    <span class="text-2xl">📖</span>
                 </div>
                 <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.35em] text-primary">Ollama API Pool</p>
-                    <h1 class="text-base sm:text-lg font-semibold text-slate-900">API 文档与调试中心</h1>
+                    <p class="text-xs font-semibold uppercase tracking-[0.35em] text-primary">Ollama / OpenRouter</p>
+                    <h1 class="text-base sm:text-lg font-semibold">API 文档与调试中心</h1>
                 </div>
-            </div>
+            </a>
             <div class="flex w-full sm:w-auto flex-wrap items-center justify-start sm:justify-end gap-2 sm:gap-3 text-xs sm:text-sm">
-                <a href="/" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
-                    登录后台
-                </a>
-                <a href="/stats" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
-                    公开统计
-                </a>
+                <a href="/project" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors flex items-center gap-1">🧾 <span>项目介绍</span></a>
+                <a href="/api-docs" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-primary/20 text-primary hover:bg-primary/10 transition-colors flex items-center gap-1">📖 <span>API 文档</span></a>
+                <a href="/stats" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors flex items-center gap-1">📊 <span>公开统计</span></a>
+                <a href="/dashboard?verify=true" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-700 transition-colors">返回控制台</a>
             </div>
         </div>
     </header>
@@ -914,19 +926,21 @@ console.log(data);</pre></div>
                 copyText(value);
             });
 
-            document.querySelectorAll('.copy-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const targetSelector = btn.getAttribute('data-copy-target');
-                    const pre = document.querySelector(targetSelector + ' pre');
-                    const text = pre ? pre.innerText : '';
-                    if (!text) {
-                        showToast('未找到可复制内容', 'error');
-                        return;
-                    }
-                    copyText(text);
-                });
+        document.querySelectorAll('.copy-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetSelector = btn.getAttribute('data-copy-target');
+                const pre = document.querySelector(targetSelector + ' pre');
+                const text = pre ? pre.innerText : '';
+                if (!text) {
+                    showToast('未找到可复制内容', 'error');
+                    return;
+                }
+                copyText(text);
             });
         });
-    </script>
+    });
+</script>
+<script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
+<script>LA.init({id:"Ky3jFxCaiJ9zgtRy",ck:"Ky3jFxCaiJ9zgtRy",autoTrack:true,hashMode:true,screenRecord:true});</script>
 </body>
 </html>`;

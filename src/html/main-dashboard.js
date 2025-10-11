@@ -10,6 +10,22 @@ export const dashboardHtml = `<!DOCTYPE html>
     <title>{{PROVIDER_LABEL}} API Pool 管理中心</title>
     <script src="https://proxy.jhun.edu.kg/proxy/cdn.tailwindcss.com/"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <meta name="description" content="统一管理 Ollama 与 OpenRouter Provider 的 API 代理池：账号轮询、客户端 Token、实时统计与多层存储。">
+    <meta name="keywords" content="Ollama, OpenRouter, API Pool, Provider 管理, Cloudflare Workers, PostgreSQL, Redis, 统一鉴权, 多账号轮询">
+    <link rel="canonical" href="https://ollama-api-pool.h7ml.workers.dev/dashboard">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="mask-icon" href="/favicon.svg" color="#4f46e5">
+    <link rel="apple-touch-icon" href="/favicon.svg">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Ollama / OpenRouter API Pool">
+    <meta property="og:title" content="{{PROVIDER_LABEL}} API Pool 管理控制台">
+    <meta property="og:description" content="多 Provider 统一代理池，提供账号轮询、健康巡检、客户端 Token 与实时统计控制台。">
+    <meta property="og:url" content="https://ollama-api-pool.h7ml.workers.dev/dashboard">
+    <meta property="og:image" content="https://ollama-api-pool.h7ml.workers.dev/logo.svg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{PROVIDER_LABEL}} API Pool 控制台">
+    <meta name="twitter:description" content="集中管理多 Provider 账号与统计，保障 API 高可用。">
+    <meta name="twitter:image" content="https://ollama-api-pool.h7ml.workers.dev/logo.svg">
     <script>
         tailwind.config = {
             theme: {
@@ -32,18 +48,21 @@ export const dashboardHtml = `<!DOCTYPE html>
 <body class="bg-slate-50 min-h-screen">
     <nav class="bg-white/90 backdrop-blur border-b border-slate-200">
         <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-6">
-            <div class="flex items-center gap-3">
+            <a href="/dashboard" class="flex items-center gap-3 text-slate-900 no-underline hover:text-primary transition-colors">
                 <div class="bg-gradient-to-br from-primary to-accent text-white rounded-xl p-2.5">
                     <span class="text-2xl">🧭</span>
                 </div>
                 <div>
                     <p class="text-sm font-medium text-primary uppercase tracking-widest" data-provider-text="badge">Ollama API Pool</p>
-                    <h1 class="text-lg font-semibold text-slate-900">统一代理池 · 管理控制台</h1>
+                    <h1 class="text-lg font-semibold">统一代理池 · 管理控制台</h1>
                 </div>
-            </div>
+            </a>
             <div class="flex items-center gap-3 text-sm">
-                <a href="/api-docs" target="_blank" class="px-4 py-2 rounded-lg border border-primary/20 text-primary hover:bg-primary/10 transition-colors flex items-center gap-2">
-                    📖 <span>API 文档</span>
+                <a href="/project" target="_blank" class="px-4 py-2 rounded-lg border border-primary/20 text-primary hover:bg-primary/10 transition-colors flex items-center gap-2">
+                    🧾 <span>项目介绍</span>
+                </a>
+                <a href="/api-docs" target="_blank" class="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors">
+                    📖 API 文档
                 </a>
                 <a href="/stats" target="_blank" class="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors">
                     📊 公开统计
@@ -399,6 +418,8 @@ export const dashboardHtml = `<!DOCTYPE html>
         </div>
     </footer>
 
+    <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
+    <script>LA.init({id:"Ky3jFxCaiJ9zgtRy",ck:"Ky3jFxCaiJ9zgtRy",autoTrack:true,hashMode:true,screenRecord:true});</script>
     <script src="/js/dashboard.js?v=13"></script>
 </body>
 </html>`;

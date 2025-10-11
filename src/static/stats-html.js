@@ -7,10 +7,24 @@ export const statsHtml = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>实时统计 - Ollama API Pool</title>
-  <meta name="description" content="Ollama API Pool 公开展示请求趋势、模型热度与资源状态的实时统计面板，与登录页保持一致布局体验。">
-  <meta name="keywords" content="Ollama API Pool, 实时统计, 模型监控, 请求趋势, Cloudflare Workers">
+  <title>实时统计 - Ollama / OpenRouter API Pool</title>
+  <meta name="description" content="实时查看 Ollama / OpenRouter API Pool 的请求趋势、模型热度、成功率等关键指标，掌握代理池运行状况。">
+  <meta name="keywords" content="Ollama API Pool, OpenRouter, 实时统计, 模型热度, 请求监控, Cloudflare Workers">
   <meta name="robots" content="index,follow">
+  <link rel="canonical" href="https://ollama-api-pool.h7ml.workers.dev/stats">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="mask-icon" href="/favicon.svg" color="#4f46e5">
+  <link rel="apple-touch-icon" href="/favicon.svg">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Ollama / OpenRouter API Pool">
+  <meta property="og:title" content="实时统计 · Ollama / OpenRouter API Pool">
+  <meta property="og:description" content="公开展示代理池的请求趋势、成功率与资源状态，透明掌控运行质量。">
+  <meta property="og:url" content="https://ollama-api-pool.h7ml.workers.dev/stats">
+  <meta property="og:image" content="https://ollama-api-pool.h7ml.workers.dev/logo.svg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="实时统计 · Ollama / OpenRouter API Pool">
+  <meta name="twitter:description" content="查看多 Provider 代理池的实时监控指标，快速感知异常。">
+  <meta name="twitter:image" content="https://ollama-api-pool.h7ml.workers.dev/logo.svg">
   <script src="https://proxy.jhun.edu.kg/proxy/cdn.tailwindcss.com/"></script>
   <script src="https://proxy.jhun.edu.kg/proxy/cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
   <script src="https://proxy.jhun.edu.kg/proxy/cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -75,19 +89,21 @@ export const statsHtml = `<!DOCTYPE html>
 </head>
 <body class="bg-slate-50 min-h-screen flex flex-col text-slate-800">
   <header class="bg-white border-b border-slate-200/80">
-    <div class="max-w-7xl mx-auto px-5 sm:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-      <div class="flex items-center gap-3">
+        <div class="max-w-7xl mx-auto px-5 sm:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+      <a href="/dashboard" class="flex items-center gap-3 text-slate-900 no-underline hover:text-primary transition-colors">
         <div class="rounded-xl bg-gradient-to-br from-primary to-accent text-white p-2.5">
           <span class="text-2xl">📊</span>
         </div>
         <div>
           <p class="text-xs font-semibold uppercase tracking-[0.35em] text-primary">Ollama API Pool</p>
-          <h1 class="text-base sm:text-lg font-semibold text-slate-900">实时公开统计</h1>
+          <h1 class="text-base sm:text-lg font-semibold">实时公开统计</h1>
         </div>
-      </div>
+      </a>
       <div class="flex w-full sm:w-auto flex-wrap items-center justify-start sm:justify-end gap-2 sm:gap-3 text-xs sm:text-sm">
-        <a href="/" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">登录后台</a>
-        <a href="/api-docs" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">API 文档</a>
+        <a href="/project" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors flex items-center gap-1">🧾 <span>项目介绍</span></a>
+        <a href="/api-docs" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors flex items-center gap-1">📖 <span>API 文档</span></a>
+        <a href="/stats" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg border border-primary/20 text-primary hover:bg-primary/10 transition-colors flex items-center gap-1">📊 <span>公开统计</span></a>
+        <a href="/dashboard?verify=true" class="px-3 py-1 sm:px-4 sm:py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-700 transition-colors">返回控制台</a>
       </div>
     </div>
   </header>
@@ -249,6 +265,9 @@ export const statsHtml = `<!DOCTYPE html>
           </p>
         </div>
       </section>
+         <section class="card p-6">
+         <script id="LA-DATA-WIDGET" crossorigin="anonymous" charset="UTF-8" src="https://v6-widget.51.la/v6/Ky3jFxCaiJ9zgtRy/quote.js?theme=0&col=true&f=12&badge=icon_0&icon=center"></script>
+           </section>
     </div>
   </main>
 
@@ -715,5 +734,7 @@ export const statsHtml = `<!DOCTYPE html>
       });
     });
   </script>
+  <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
+  <script>LA.init({id:"Ky3jFxCaiJ9zgtRy",ck:"Ky3jFxCaiJ9zgtRy",autoTrack:true,hashMode:true,screenRecord:true});</script>
 </body>
 </html>`;
