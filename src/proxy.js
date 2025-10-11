@@ -11,11 +11,13 @@ import { errorResponse, jsonResponse, corsHeaders, isKvStorageEnabled } from './
 import { getCachedResponse, setCachedResponse } from './cache';
 import { isRedisEnabled, redisIncr, redisExpire, redisGet, redisSet } from './redis';
 import { isPostgresEnabled, pgRecordKeyStats, pgIncrementGlobalStats, pgUpsertModelStats, pgUpsertModelHourly } from './postgres';
+import { normalizeProvider, getProviderConfig, buildUpstreamHeaders } from './providers';
 
-const OLLAMA_API_URL = 'https://ollama.com/v1/chat/completions';
 const MAX_RETRIES = 3;
 
-export async function handleProxyRequest(request, env) {
+export async function handleProxyRequest(request, env, provider = 'ollama') {
+  const normalizedProvider = normalizeProvider(provider);
+  const providerConfig = getProviderConfig(normalizedProvider);
   try {
     // 读取环境变量配置
     const enableBotDetection = env.ENABLE_BOT_DETECTION !== 'false';
@@ -40,7 +42,7 @@ export async function handleProxyRequest(request, env) {
 
     // 2. 速率限制（可选，会消耗 KV 读取）
     if (enableRateLimit) {
-      const rateLimitKey = `ratelimit:${clientIP}:${Math.floor(Date.now() / (rateLimitWindow * 1000))}`;
+      const rateLimitKey = `ratelimit:${normalizedProvider}:${clientIP}:${Math.floor(Date.now() / (rateLimitWindow * 1000))}`;
       if (isRedisEnabled(env)) {
         const count = await applyRedisRateLimit(env, rateLimitKey, rateLimitWindow);
         if (count !== null && count > rateLimitRequests) {
@@ -61,7 +63,7 @@ export async function handleProxyRequest(request, env) {
     }
 
     const clientToken = authHeader.substring(7);
-    const isValid = await verifyClientToken(clientToken, env);
+    const isValid = await verifyClientToken(clientToken, env, normalizedProvider);
     if (!isValid) {
       return errorResponse('Invalid API token', 401);
     }
@@ -73,7 +75,7 @@ export async function handleProxyRequest(request, env) {
 
     // 尝试从缓存获取响应（仅非流式请求）
     if (!isStreaming) {
-      const cachedResponse = await getCachedResponse(env, requestBody);
+      const cachedResponse = await getCachedResponse(env, requestBody, normalizedProvider);
       if (cachedResponse) {
         // 返回缓存的响应，添加缓存标识
         const response = {
@@ -95,7 +97,7 @@ export async function handleProxyRequest(request, env) {
     // 尝试多个 API Key
     let lastError = null;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const apiKey = await getNextApiKey(env);
+      const apiKey = await getNextApiKey(env, normalizedProvider);
 
       if (!apiKey) {
         return errorResponse('No available API keys', 503);
@@ -103,17 +105,14 @@ export async function handleProxyRequest(request, env) {
 
       try {
         // 转发请求到 Ollama API
-        const response = await fetch(OLLAMA_API_URL, {
+        const response = await fetch(providerConfig.upstream.chatCompletions, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
+          headers: buildUpstreamHeaders(normalizedProvider, apiKey, env),
           body: JSON.stringify(requestBody)
         });
 
         // 记录使用
-        await recordUsage(env, clientToken, apiKey, response.status, modelName);
+        await recordUsage(env, clientToken, apiKey, response.status, modelName, normalizedProvider);
 
         if (response.ok) {
           // 成功,根据是否流式返回不同格式
@@ -132,7 +131,7 @@ export async function handleProxyRequest(request, env) {
             const data = await response.json();
 
             // 缓存成功的响应
-            await setCachedResponse(env, requestBody, data);
+            await setCachedResponse(env, requestBody, data, normalizedProvider);
 
             // 添加缓存标识
             return new Response(JSON.stringify(data), {
@@ -145,7 +144,7 @@ export async function handleProxyRequest(request, env) {
           }
         } else if (response.status === 401 || response.status === 403) {
           // API Key 失效,标记并重试
-          await markApiKeyFailed(env, apiKey);
+          await markApiKeyFailed(env, apiKey, normalizedProvider);
           lastError = `API key failed with status ${response.status}`;
           continue;
         } else {
@@ -183,35 +182,33 @@ async function applyRedisRateLimit(env, key, windowSeconds) {
 }
 
 // 记录使用情况（可配置版本：通过环境变量控制采样率）
-async function recordUsage(env, clientToken, apiKey, statusCode, modelName) {
+async function recordUsage(env, clientToken, apiKey, statusCode, modelName, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   const isSuccess = statusCode >= 200 && statusCode < 300;
   const enableAnalytics = env.ENABLE_ANALYTICS === 'true';
 
-  await updateGlobalStatsAccurate(env, isSuccess);
+  await updateGlobalStatsAccurate(env, isSuccess, normalized);
 
-  // 仅在失败时记录，用于自动禁用 API Key
   if (!isSuccess) {
-    await recordKeyStats(env, apiKey, statusCode);
+    await recordKeyStats(env, apiKey, statusCode, normalized);
   }
 
-  // 如果启用统计分析，使用采样记录
   if (enableAnalytics) {
     const statsSampleRate = parseFloat(env.STATS_SAMPLE_RATE || '0.1');
     const modelStatsSampleRate = parseFloat(env.MODEL_STATS_SAMPLE_RATE || '0.2');
 
-    // 模型统计采样
     if (Math.random() < modelStatsSampleRate) {
-      await recordModelStats(env, modelName, statusCode);
+      await recordModelStats(env, modelName, statusCode, normalized);
     }
   }
-  // 否则完全不记录统计，节省 KV 写入
 }
 
 // 记录 API Key 统计信息
-async function recordKeyStats(env, apiKey, statusCode) {
+async function recordKeyStats(env, apiKey, statusCode, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
     const isSuccess = statusCode >= 200 && statusCode < 300;
-    await pgRecordKeyStats(env, apiKey, { isSuccess });
+    await pgRecordKeyStats(env, apiKey, { isSuccess }, normalized);
     return;
   }
 
@@ -219,7 +216,8 @@ async function recordKeyStats(env, apiKey, statusCode) {
     return;
   }
 
-  const statsKey = `key_stats:${apiKey}`;
+  const prefix = normalized === 'ollama' ? '' : `${normalized}:`;
+  const statsKey = `${prefix}key_stats:${apiKey}`;
   const isSuccess = statusCode >= 200 && statusCode < 300;
 
   // 获取现有统计
@@ -261,19 +259,21 @@ async function recordKeyStats(env, apiKey, statusCode) {
 
   // 智能禁用逻辑: 连续失败 3 次自动禁用 1 小时
   if (stats.consecutiveFailures >= 3 && isKvStorageEnabled(env)) {
-    await env.API_KEYS.put(`failed:${apiKey}`, 'auto-disabled', {
+    await env.API_KEYS.put(`${prefix}failed:${apiKey}`, 'auto-disabled', {
       expirationTtl: 3600
     });
   }
 }
 
 // 更新全局统计信息（KV 版本）
-async function updateGlobalStatsKV(env, isSuccess) {
+async function updateGlobalStatsKV(env, isSuccess, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (!isKvStorageEnabled(env)) {
     return;
   }
 
-  const globalStatsData = await env.API_KEYS.get('global_stats');
+  const statsKey = normalized === 'ollama' ? 'global_stats' : `${normalized}:global_stats`;
+  const globalStatsData = await env.API_KEYS.get(statsKey);
   let globalStats = globalStatsData ? JSON.parse(globalStatsData) : {
     totalRequests: 0,
     successCount: 0,
@@ -290,12 +290,13 @@ async function updateGlobalStatsKV(env, isSuccess) {
   globalStats.lastUpdated = new Date().toISOString();
 
   // 保存全局统计（永久保存）
-  await env.API_KEYS.put('global_stats', JSON.stringify(globalStats));
+  await env.API_KEYS.put(statsKey, JSON.stringify(globalStats));
 }
 
-async function updateGlobalStatsAccurate(env, isSuccess) {
+async function updateGlobalStatsAccurate(env, isSuccess, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    const ok = await pgIncrementGlobalStats(env, { isSuccess });
+    const ok = await pgIncrementGlobalStats(env, { isSuccess }, normalized);
     if (ok) {
       return;
     }
@@ -310,17 +311,19 @@ async function updateGlobalStatsAccurate(env, isSuccess) {
     return;
   }
 
-  await updateGlobalStatsKV(env, isSuccess);
+  await updateGlobalStatsKV(env, isSuccess, normalized);
 }
 
 // 记录模型统计信息（支持24小时和1小时时间窗口）
-async function recordModelStats(env, modelName, statusCode) {
+async function recordModelStats(env, modelName, statusCode, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   const now = Date.now();
   const hour = new Date(now).toISOString().slice(0, 13); // 精确到小时，如 "2025-01-15T08"
   const isSuccess = statusCode >= 200 && statusCode < 300;
   const redisEnabled = isRedisEnabled(env);
   const kvEnabled = isKvStorageEnabled(env);
   const postgresEnabled = isPostgresEnabled(env);
+  const prefix = normalized === 'ollama' ? '' : `${normalized}:`;
 
   if (!redisEnabled && !kvEnabled && !postgresEnabled) {
     return;
@@ -330,8 +333,8 @@ async function recordModelStats(env, modelName, statusCode) {
 
   if (postgresEnabled) {
     try {
-      await pgUpsertModelStats(env, modelName, { isSuccess, timestamp });
-      await pgUpsertModelHourly(env, modelName, hour, { isSuccess });
+      await pgUpsertModelStats(env, modelName, { isSuccess, timestamp }, normalized);
+      await pgUpsertModelHourly(env, modelName, hour, { isSuccess }, normalized);
     } catch (error) {
       console.warn('Postgres 写入模型统计失败:', error);
     }
@@ -339,7 +342,7 @@ async function recordModelStats(env, modelName, statusCode) {
 
   if (redisEnabled) {
     try {
-      const aggregateKey = `model_stats:${modelName}`;
+      const aggregateKey = `${prefix}model_stats:${modelName}`;
       const aggregateRaw = await redisGet(env, aggregateKey);
       let aggregate = aggregateRaw ? JSON.parse(aggregateRaw) : {
         model: modelName,
@@ -360,7 +363,7 @@ async function recordModelStats(env, modelName, statusCode) {
 
       await redisSet(env, aggregateKey, aggregate, 604800);
 
-      const hourlyKey = `model_hourly:${modelName}:${hour}`;
+      const hourlyKey = `${prefix}model_hourly:${modelName}:${hour}`;
       const hourlyRaw = await redisGet(env, hourlyKey);
       let hourly = hourlyRaw ? JSON.parse(hourlyRaw) : {
         model: modelName,
@@ -387,7 +390,7 @@ async function recordModelStats(env, modelName, statusCode) {
     return;
   }
 
-  const statsKey = `model_stats:${modelName}`;
+  const statsKey = `${prefix}model_stats:${modelName}`;
   const statsData = await env.API_KEYS.get(statsKey);
   let stats = statsData ? JSON.parse(statsData) : {
     model: modelName,
@@ -410,7 +413,7 @@ async function recordModelStats(env, modelName, statusCode) {
     expirationTtl: 604800
   });
 
-  const hourlyKey = `model_hourly:${modelName}:${hour}`;
+  const hourlyKey = `${prefix}model_hourly:${modelName}:${hour}`;
   const hourlyData = await env.API_KEYS.get(hourlyKey);
   let hourlyStats = hourlyData ? JSON.parse(hourlyData) : {
     model: modelName,

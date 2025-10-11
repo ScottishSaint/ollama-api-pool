@@ -15,6 +15,9 @@ import { handleAdmin } from './admin';
 import { handleDashboard } from './dashboard';
 import { corsHeaders, jsonResponse, errorResponse } from './utils';
 import { getCachedModels, setCachedModels } from './cache';
+import { countApiKeys, getNextApiKey } from './keyManager';
+import { verifyClientToken } from './auth';
+import { normalizeProvider, getProviderConfig, buildUpstreamHeaders } from './providers';
 
 export default {
   async fetch(request, env, ctx) {
@@ -71,19 +74,24 @@ export default {
         // 管理 API
         return handleAdmin(request, env);
       } else if (path === '/v1/chat/completions') {
-        // Ollama API 代理 (OpenAI 兼容)
-        // 检查是否有可用的 API Keys
-        const hasKeys = await checkHasApiKeys(env);
+        const hasKeys = await checkHasApiKeys(env, 'ollama');
         if (!hasKeys) {
           return errorResponse('No API keys configured. Please add keys via admin dashboard', 503);
         }
-        return handleProxyRequest(request, env);
+        return handleProxyRequest(request, env, 'ollama');
+      } else if (path === '/openrouter/v1/chat/completions') {
+        const hasKeys = await checkHasApiKeys(env, 'openrouter');
+        if (!hasKeys) {
+          return errorResponse('No OpenRouter API keys configured. Please add keys via admin dashboard', 503);
+        }
+        return handleProxyRequest(request, env, 'openrouter');
       } else if (path === '/v1/models') {
-        // 模型列表 (OpenAI 兼容接口)
-        return handleModels(request, env);
+        return handleModels(request, env, 'ollama');
+      } else if (path === '/openrouter/v1/models') {
+        return handleModels(request, env, 'openrouter');
       } else if (path === '/health') {
         // 健康检查
-        const hasKeys = await checkHasApiKeys(env);
+        const hasKeys = await checkHasApiKeys(env, 'ollama');
 
         return jsonResponse({
           status: 'ok',
@@ -118,30 +126,31 @@ export default {
 };
 
 // 检查是否有可用的 API Keys
-async function checkHasApiKeys(env) {
-  const keysData = await env.API_KEYS.get('api_keys_list');
-  if (!keysData) return false;
-
-  const keys = JSON.parse(keysData);
-  return keys && keys.length > 0;
+async function checkHasApiKeys(env, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
+  const total = await countApiKeys(env, normalized);
+  return total > 0;
 }
 
 // 模型列表处理 - 代理到 ollama.com/api/tags 并转换为 OpenAI 格式
-async function handleModels(request, env) {
+async function handleModels(request, env, provider = 'ollama') {
   try {
+    const normalized = normalizeProvider(provider);
+    const providerConfig = getProviderConfig(normalized);
+    const modelHeaders = buildUpstreamHeaders(normalized, '', env);
+
     // 验证客户端 Token（可选，如果提供了 Authorization 头）
     const authHeader = request.headers.get('Authorization');
     if (authHeader && authHeader.startsWith('Bearer ')) {
-      const { verifyClientToken } = await import('./auth');
       const clientToken = authHeader.substring(7);
-      const isValid = await verifyClientToken(clientToken, env);
+      const isValid = await verifyClientToken(clientToken, env, normalized);
       if (!isValid) {
         return errorResponse('Invalid API token', 401);
       }
     }
 
     // 尝试从缓存获取
-    const cachedModels = await getCachedModels(env);
+    const cachedModels = await getCachedModels(env, normalized);
     if (cachedModels) {
       return new Response(JSON.stringify(cachedModels), {
         headers: {
@@ -154,18 +163,17 @@ async function handleModels(request, env) {
     }
 
     // 获取一个可用的 API Key 用于获取模型列表
-    const { getNextApiKey } = await import('./keyManager');
-    const apiKey = await getNextApiKey(env);
+    const apiKey = await getNextApiKey(env, normalized);
 
     if (!apiKey) {
       return errorResponse('No available API keys', 503);
     }
 
-    // 请求 Ollama API Tags
-    const response = await fetch('https://ollama.com/api/tags', {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`
-      }
+    const headers = buildUpstreamHeaders(normalized, apiKey, env);
+    delete headers['Content-Type'];
+
+    const response = await fetch(providerConfig.upstream.models, {
+      headers
     });
 
     if (!response.ok) {
@@ -174,16 +182,29 @@ async function handleModels(request, env) {
 
     const data = await response.json();
 
-    // 转换为 OpenAI 格式
-    const models = (data.models || []).map(model => ({
-      id: model.name || model.model,
-      object: 'model',
-      created: Math.floor(Date.now() / 1000),
-      owned_by: 'ollama',
-      permission: [],
-      root: model.name || model.model,
-      parent: null
-    }));
+    let models;
+    if (normalized === 'ollama') {
+      models = (data.models || []).map(model => ({
+        id: model.name || model.model,
+        object: 'model',
+        created: Math.floor(Date.now() / 1000),
+        owned_by: 'ollama',
+        permission: [],
+        root: model.name || model.model,
+        parent: null
+      }));
+    } else {
+      const list = Array.isArray(data.data) ? data.data : (data.models || []);
+      models = list.map(item => ({
+        id: item.id || item.name,
+        object: 'model',
+        created: Math.floor(Date.now() / 1000),
+        owned_by: item.owned_by || 'openrouter',
+        permission: [],
+        root: item.id || item.name,
+        parent: null
+      }));
+    }
 
     const result = {
       object: 'list',
@@ -191,7 +212,7 @@ async function handleModels(request, env) {
     };
 
     // 缓存结果
-    await setCachedModels(env, result);
+    await setCachedModels(env, result, normalized);
 
     return new Response(JSON.stringify(result), {
       headers: {

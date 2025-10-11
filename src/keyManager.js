@@ -17,6 +17,7 @@ import {
   pgListKeyStats,
   pgCountApiKeys
 } from './postgres';
+import { normalizeProvider, getDefaultProbeModel, buildUpstreamHeaders, getProviderConfig } from './providers';
 
 // 生成 API Key 的哈希值（用于 KV Key，避免超过 512 字节限制，KV 模式专用）
 export async function hashApiKey(apiKey) {
@@ -27,13 +28,20 @@ export async function hashApiKey(apiKey) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+function getKvKey(provider, key) {
+  const normalized = normalizeProvider(provider);
+  return normalized === 'ollama' ? key : `${normalized}:${key}`;
+}
+
 /**
  * 获取下一个可用的 API Key（简化版：随机选择）
  * 直接从所有 Key 中随机选择一个，不检查状态（性能优先）
  */
-export async function getNextApiKey(env) {
+export async function getNextApiKey(env, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
+
   if (isPostgresEnabled(env)) {
-    const keys = await pgListActiveApiKeys(env);
+    const keys = await pgListActiveApiKeys(env, normalized);
     if (!keys || keys.length === 0) {
       return null;
     }
@@ -42,7 +50,8 @@ export async function getNextApiKey(env) {
   }
 
   try {
-    const keysData = await env.API_KEYS.get('api_keys_list');
+    const listKey = getKvKey(normalized, 'api_keys_list');
+    const keysData = await env.API_KEYS.get(listKey);
     if (!keysData) {
       return null;
     }
@@ -62,15 +71,16 @@ export async function getNextApiKey(env) {
 }
 
 // 标记 API Key 失效 (1小时)
-export async function markApiKeyFailed(env, apiKey) {
+export async function markApiKeyFailed(env, apiKey, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    await pgMarkApiKeyFailed(env, apiKey);
+    await pgMarkApiKeyFailed(env, apiKey, 3, 3600, normalized);
     return;
   }
 
   try {
     const keyHash = await hashApiKey(apiKey);
-    await env.API_KEYS.put(`failed:${keyHash}`, '1', {
+    await env.API_KEYS.put(getKvKey(normalized, `failed:${keyHash}`), '1', {
       expirationTtl: 3600 // 1小时后自动恢复
     });
   } catch (error) {
@@ -79,17 +89,19 @@ export async function markApiKeyFailed(env, apiKey) {
 }
 
 // 添加 API Key
-export async function addApiKey(env, apiKey, username = null, ttl = null) {
+export async function addApiKey(env, apiKey, username = null, ttl = null, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    return await pgAddApiKey(env, apiKey, username, ttl);
+    return await pgAddApiKey(env, apiKey, username, ttl, normalized);
   }
 
-  const keysData = await env.API_KEYS.get('api_keys_list');
+  const listKey = getKvKey(normalized, 'api_keys_list');
+  const keysData = await env.API_KEYS.get(listKey);
   const keys = keysData ? JSON.parse(keysData) : [];
 
   if (!keys.includes(apiKey)) {
     keys.push(apiKey);
-    await env.API_KEYS.put('api_keys_list', JSON.stringify(keys));
+    await env.API_KEYS.put(listKey, JSON.stringify(keys));
 
     // 存储用户名元数据（包含 TTL 和过期时间）
     const metadata = {
@@ -104,7 +116,7 @@ export async function addApiKey(env, apiKey, username = null, ttl = null) {
     }
 
     const keyHash = await hashApiKey(apiKey);
-    await env.API_KEYS.put(`key_metadata:${keyHash}`, JSON.stringify(metadata));
+    await env.API_KEYS.put(getKvKey(normalized, `key_metadata:${keyHash}`), JSON.stringify(metadata));
 
     return true;
   }
@@ -112,12 +124,14 @@ export async function addApiKey(env, apiKey, username = null, ttl = null) {
 }
 
 //删除 API Key
-export async function removeApiKey(env, apiKey) {
+export async function removeApiKey(env, apiKey, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    return await pgRemoveApiKey(env, apiKey);
+    return await pgRemoveApiKey(env, apiKey, normalized);
   }
 
-  const keysData = await env.API_KEYS.get('api_keys_list');
+  const listKey = getKvKey(normalized, 'api_keys_list');
+  const keysData = await env.API_KEYS.get(listKey);
   if (!keysData) return false;
 
   const keys = JSON.parse(keysData);
@@ -125,13 +139,13 @@ export async function removeApiKey(env, apiKey) {
 
   if (index > -1) {
     keys.splice(index, 1);
-    await env.API_KEYS.put('api_keys_list', JSON.stringify(keys));
+    await env.API_KEYS.put(listKey, JSON.stringify(keys));
 
     // 删除相关元数据
     const keyHash = await hashApiKey(apiKey);
-    await env.API_KEYS.delete(`key_metadata:${keyHash}`);
-    await env.API_KEYS.delete(`failed:${keyHash}`);
-    await env.API_KEYS.delete(`disabled:${keyHash}`);
+    await env.API_KEYS.delete(getKvKey(normalized, `key_metadata:${keyHash}`));
+    await env.API_KEYS.delete(getKvKey(normalized, `failed:${keyHash}`));
+    await env.API_KEYS.delete(getKvKey(normalized, `disabled:${keyHash}`));
 
     return true;
   }
@@ -139,12 +153,14 @@ export async function removeApiKey(env, apiKey) {
 }
 
 // 获取所有 API Key 列表（优化版：批量并行查询）
-export async function listApiKeys(env) {
+export async function listApiKeys(env, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    return await pgListApiKeys(env);
+    return await pgListApiKeys(env, normalized);
   }
 
-  const keysData = await env.API_KEYS.get('api_keys_list');
+  const listKey = getKvKey(normalized, 'api_keys_list');
+  const keysData = await env.API_KEYS.get(listKey);
   if (!keysData) return [];
 
   const keys = JSON.parse(keysData);
@@ -155,9 +171,9 @@ export async function listApiKeys(env) {
 
     // 并行获取所有相关数据
     const [failed, disabled, metadataStr] = await Promise.all([
-      env.API_KEYS.get(`failed:${keyHash}`),
-      env.API_KEYS.get(`disabled:${keyHash}`),
-      env.API_KEYS.get(`key_metadata:${keyHash}`)
+      env.API_KEYS.get(getKvKey(normalized, `failed:${keyHash}`)),
+      env.API_KEYS.get(getKvKey(normalized, `disabled:${keyHash}`)),
+      env.API_KEYS.get(getKvKey(normalized, `key_metadata:${keyHash}`))
     ]);
 
     const metadata = metadataStr ? JSON.parse(metadataStr) : {};
@@ -192,16 +208,18 @@ export async function listApiKeys(env) {
 }
 
 // 批量导入 API Keys
-export async function importApiKeys(env, keys) {
+export async function importApiKeys(env, keys, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    return await pgImportApiKeys(env, keys);
+    return await pgImportApiKeys(env, keys, null, null, normalized);
   }
 
-  const keysData = await env.API_KEYS.get('api_keys_list');
+  const listKey = getKvKey(normalized, 'api_keys_list');
+  const keysData = await env.API_KEYS.get(listKey);
   const existingKeys = keysData ? JSON.parse(keysData) : [];
 
   const newKeys = [...new Set([...existingKeys, ...keys])];
-  await env.API_KEYS.put('api_keys_list', JSON.stringify(newKeys));
+  await env.API_KEYS.put(listKey, JSON.stringify(newKeys));
 
   return {
     total: newKeys.length,
@@ -211,13 +229,14 @@ export async function importApiKeys(env, keys) {
 }
 
 // 获取 API Key 统计信息
-export async function getKeyStats(env, apiKey) {
+export async function getKeyStats(env, apiKey, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    return await pgGetKeyStats(env, apiKey);
+    return await pgGetKeyStats(env, apiKey, normalized);
   }
 
   const keyHash = await hashApiKey(apiKey);
-  const statsKey = `key_stats:${keyHash}`;
+  const statsKey = getKvKey(normalized, `key_stats:${keyHash}`);
   const statsData = await env.API_KEYS.get(statsKey);
 
   if (!statsData) {
@@ -233,7 +252,7 @@ export async function getKeyStats(env, apiKey) {
   }
 
   const stats = JSON.parse(statsData);
-  const failed = await env.API_KEYS.get(`failed:${keyHash}`);
+  const failed = await env.API_KEYS.get(getKvKey(normalized, `failed:${keyHash}`));
 
   return {
     apiKey: apiKey.substring(0, 20) + '...',
@@ -245,26 +264,30 @@ export async function getKeyStats(env, apiKey) {
 }
 
 // 获取所有 API Key 的统计信息
-export async function getAllKeyStats(env) {
+export async function getAllKeyStats(env, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    return await pgListKeyStats(env);
+    return await pgListKeyStats(env, normalized);
   }
 
-  const keysData = await env.API_KEYS.get('api_keys_list');
+  const listKey = getKvKey(normalized, 'api_keys_list');
+  const keysData = await env.API_KEYS.get(listKey);
   if (!keysData) return [];
 
   const keys = JSON.parse(keysData);
-  const statsPromises = keys.map(key => getKeyStats(env, key));
+  const statsPromises = keys.map(key => getKeyStats(env, key, normalized));
 
   return await Promise.all(statsPromises);
 }
 
-export async function countApiKeys(env) {
+export async function countApiKeys(env, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    return await pgCountApiKeys(env);
+    return await pgCountApiKeys(env, normalized);
   }
 
-  const keysData = await env.API_KEYS.get('api_keys_list');
+  const listKey = getKvKey(normalized, 'api_keys_list');
+  const keysData = await env.API_KEYS.get(listKey);
   if (!keysData) return 0;
 
   const keys = JSON.parse(keysData);
@@ -272,42 +295,46 @@ export async function countApiKeys(env) {
 }
 
 // 手动禁用 API Key
-export async function disableApiKey(env, apiKey, duration = 3600) {
+export async function disableApiKey(env, apiKey, duration = 3600, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    await pgDisableApiKey(env, apiKey, duration);
+    await pgDisableApiKey(env, apiKey, duration, normalized);
     return;
   }
 
   const keyHash = await hashApiKey(apiKey);
-  await env.API_KEYS.put(`disabled:${keyHash}`, 'manual', {
+  await env.API_KEYS.put(getKvKey(normalized, `disabled:${keyHash}`), 'manual', {
     expirationTtl: duration
   });
 }
 
 // 手动启用 API Key
-export async function enableApiKey(env, apiKey) {
+export async function enableApiKey(env, apiKey, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    await pgEnableApiKey(env, apiKey);
+    await pgEnableApiKey(env, apiKey, normalized);
     return;
   }
 
   const keyHash = await hashApiKey(apiKey);
-  await env.API_KEYS.delete(`disabled:${keyHash}`);
-  await env.API_KEYS.delete(`failed:${keyHash}`);
+  await env.API_KEYS.delete(getKvKey(normalized, `disabled:${keyHash}`));
+  await env.API_KEYS.delete(getKvKey(normalized, `failed:${keyHash}`));
 }
 
 // 健康检查 - 验证 API Key 是否可用
-export async function healthCheck(env, apiKey) {
+export async function healthCheck(env, apiKey, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
+  const config = getProviderConfig(normalized);
+  const defaultModel = getDefaultProbeModel(normalized);
+  const headers = buildUpstreamHeaders(normalized, apiKey, env, { Accept: '*/*' });
+
   try {
-    const response = await fetch('https://ollama.com/v1/chat/completions', {
+    const response = await fetch(config.upstream.chatCompletions, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
+      headers,
       body: JSON.stringify({
-        model: 'kimi-k2:1t',
-        messages: [{ role: 'user', content: 'test' }],
+        model: defaultModel,
+        messages: [{ role: 'user', content: 'health check' }],
         stream: false
       })
     });
@@ -327,27 +354,35 @@ export async function healthCheck(env, apiKey) {
 }
 
 // 批量健康检查（优化版：只标记失败的 Key）
-export async function healthCheckAll(env) {
-  const keysData = await env.API_KEYS.get('api_keys_list');
-  if (!keysData) return [];
+export async function healthCheckAll(env, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
+  let keys = [];
 
-  const keys = JSON.parse(keysData);
+  if (isPostgresEnabled(env)) {
+    const rows = await pgListApiKeys(env, normalized);
+    if (Array.isArray(rows)) {
+      keys = rows.map(row => row.api_key || row.apiKey).filter(Boolean);
+    }
+  } else {
+    const listKey = getKvKey(normalized, 'api_keys_list');
+    const keysData = await env.API_KEYS.get(listKey);
+    if (!keysData) return [];
+    keys = JSON.parse(keysData);
+  }
+
   const results = [];
 
   for (const key of keys) {
-    const health = await healthCheck(env, key);
+    const health = await healthCheck(env, key, normalized);
     results.push({
       apiKey: key.substring(0, 20) + '...',
       fullKey: key,
       ...health
     });
 
-    // 只在失败时写入 KV，成功时不操作（节省 KV 写入）
     if (!health.healthy) {
-      await markApiKeyFailed(env, key);
+      await markApiKeyFailed(env, key, normalized);
     }
-    // 移除自动启用逻辑，减少 KV 写入
-    // 如需启用，请手动调用 enableApiKey
   }
 
   return results;

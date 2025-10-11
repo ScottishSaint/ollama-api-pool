@@ -10,7 +10,23 @@ export const dashboardJs = `/**
 const STORAGE_KEY = 'adminToken';
 const PROJECT_START_DISPLAY = '2025-10-09';
 const PROJECT_START_DATE = new Date('2025-10-09T00:00:00+08:00');
+const PROVIDER_COPY = {
+    ollama: {
+        label: 'Ollama',
+        badge: 'Ollama API Pool',
+        heroTitle: '构建稳定的 Ollama API 代理池',
+        heroDesc: '通过统一入口调度 Ollama 多账号，自动完成负载均衡、故障转移与实时统计，确保应用稳定可用。'
+    },
+    openrouter: {
+        label: 'OpenRouter',
+        badge: 'OpenRouter API Pool',
+        heroTitle: '构建统一的 OpenRouter 代理池',
+        heroDesc: '集中管理 OpenRouter 上游 Key，落实 Referer 约束、模型分发与调用统计，让多供应商场景更清晰易控。'
+    }
+};
+
 let currentTab = 'api-keys';
+let currentProvider = localStorage.getItem('provider') || 'ollama';
 
 // 获取 Token
 function getToken() {
@@ -107,6 +123,60 @@ function logout() {
     }
 }
 
+function refreshCurrentView() {
+    if (currentTab === 'api-keys') {
+        loadApiKeys(apiKeysPage);
+    } else if (currentTab === 'tokens') {
+        loadClientTokens();
+    } else if (currentTab === 'stats') {
+        loadStats();
+    }
+}
+
+// 更新提供方切换按钮的状态样式
+function updateProviderSelection() {
+    $('[data-provider-option]').removeClass('bg-primary text-white').addClass('bg-white text-slate-600');
+    $('[data-provider-option="' + currentProvider + '"]').addClass('bg-primary text-white').removeClass('bg-white text-slate-600');
+}
+
+// 根据提供方更新页面文案
+function applyProviderTexts() {
+    const copy = PROVIDER_COPY[currentProvider] || PROVIDER_COPY.ollama;
+    document.title = copy.label + ' API Pool 管理中心';
+
+    $('[data-provider-text="badge"]').text(copy.badge);
+    $('[data-provider-text="hero-title"]').text(copy.heroTitle);
+    $('[data-provider-text="hero-desc"]').text(copy.heroDesc);
+}
+
+function switchProvider(provider) {
+    if (!provider) {
+        return;
+    }
+
+    if (provider === currentProvider) {
+        updateProviderSelection();
+        return;
+    }
+
+    currentProvider = provider;
+    localStorage.setItem('provider', provider);
+
+    updateProviderSelection();
+    applyProviderTexts();
+
+    refreshCurrentView();
+}
+
+function withProviderQuery(url) {
+    if (!url) return url;
+    return url.includes('?') ? url + '&provider=' + currentProvider : url + '?provider=' + currentProvider;
+}
+
+function withProviderBody(body = {}) {
+    return { ...body, provider: currentProvider };
+}
+
 // ==================== API Keys 管理 ====================
 
 // 分页状态
@@ -119,7 +189,7 @@ let apiKeysTotalCount = 0;
 async function loadApiKeys(page = 1) {
     try {
         // 使用分页参数请求后端
-        const response = await fetch(\`/admin/api-keys?page=\${page}&pageSize=\${apiKeysPageSize}\`, {
+        const response = await fetch(withProviderQuery('/admin/api-keys?page=' + page + '&pageSize=' + apiKeysPageSize), {
             headers: { 'Authorization': \`Bearer \${getToken()}\` }
         });
 
@@ -389,7 +459,7 @@ async function toggleApiKeyStatus(apiKey, action) {
                 'Authorization': \`Bearer \${getToken()}\`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ apiKey, duration: action === 'disable' ? 3600 : undefined })
+            body: JSON.stringify(withProviderBody({ apiKey, duration: action === 'disable' ? 3600 : undefined }))
         });
 
         if (!response.ok) throw new Error(\`\${actionText}失败\`);
@@ -413,13 +483,13 @@ async function addApiKey() {
     }
 
     try {
-        const response = await fetch('/admin/api-keys', {
+        const response = await fetch(withProviderQuery('/admin/api-keys'), {
             method: 'POST',
             headers: {
                 'Authorization': \`Bearer \${getToken()}\`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ username, api_key: apiKey, ttl: ttl > 0 ? ttl : null })
+            body: JSON.stringify(withProviderBody({ username, api_key: apiKey, ttl: ttl > 0 ? ttl : null }))
         });
 
         if (!response.ok) throw new Error('添加失败');
@@ -514,13 +584,13 @@ async function batchDeleteKeys(apiKeys) {
 
     try {
         // 一次性发送批量删除请求
-        const response = await fetch('/admin/api-keys', {
+        const response = await fetch(withProviderQuery('/admin/api-keys'), {
             method: 'DELETE',
             headers: {
                 'Authorization': \`Bearer \${getToken()}\`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ apiKeys })
+            body: JSON.stringify(withProviderBody({ apiKeys }))
         });
 
         if (!response.ok) {
@@ -554,7 +624,7 @@ let clientTokensPageSize = 10;
 
 async function loadClientTokens(page = 1) {
     try {
-        const response = await fetch('/admin/client-tokens', {
+        const response = await fetch(withProviderQuery('/admin/client-tokens'), {
             headers: { 'Authorization': \`Bearer \${getToken()}\` }
         });
 
@@ -630,7 +700,7 @@ async function generateClientToken() {
                 'Authorization': \`Bearer \${getToken()}\`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ name: tokenName, ttl: ttl > 0 ? ttl : null })
+            body: JSON.stringify(withProviderBody({ name: tokenName, ttl: ttl > 0 ? ttl : null }))
         });
 
         if (!response.ok) throw new Error('生成失败');
@@ -694,13 +764,13 @@ async function verifySingleKey(apiKey, index) {
     statusSpan.html('<span class="px-3 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">验证中...</span>');
 
     try {
-        const response = await fetch('/admin/verify-key', {
+        const response = await fetch(withProviderQuery('/admin/verify-key'), {
             method: 'POST',
             headers: {
                 'Authorization': \`Bearer \${getToken()}\`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ apiKey })
+            body: JSON.stringify(withProviderBody({ apiKey }))
         });
 
         console.log('验证响应状态:', response.status, response.statusText);
@@ -921,13 +991,13 @@ async function importAccounts() {
     $('#import-status').text(\`正在导入 \${accounts.length} 个账号...\`).css('color', '#3b82f6');
 
     try {
-        const response = await fetch('/admin/import', {
+        const response = await fetch(withProviderQuery('/admin/import'), {
             method: 'POST',
             headers: {
                 'Authorization': \`Bearer \${getToken()}\`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ accounts })
+            body: JSON.stringify(withProviderBody({ accounts }))
         });
 
         if (!response.ok) throw new Error('导入失败');
@@ -960,7 +1030,7 @@ async function importAccounts() {
 
 async function loadStats() {
     try {
-        const response = await fetch('/admin/stats', {
+        const response = await fetch(withProviderQuery('/admin/stats'), {
             headers: { 'Authorization': 'Bearer ' + getToken() }
         });
 
@@ -1014,7 +1084,7 @@ $(document).ready(function() {
     }
 
     // 验证 token 有效性
-    fetch('/admin/stats', {
+    fetch(withProviderQuery('/admin/stats'), {
         headers: { 'Authorization': \`Bearer \${token}\` }
     }).then(response => {
         if (!response.ok) {
@@ -1026,6 +1096,16 @@ $(document).ready(function() {
     }).catch(() => {
         showToast('网络错误', 'error');
     });
+
+    // 绑定提供方切换按钮，支持在 UI 中切换不同池子
+    $('[data-provider-option]').on('click', function() {
+        const provider = $(this).data('provider-option');
+        switchProvider(provider);
+    });
+
+    // 恢复上次选中的提供方按钮样式
+    updateProviderSelection();
+    applyProviderTexts();
 
     // 初始加载
     loadApiKeys();

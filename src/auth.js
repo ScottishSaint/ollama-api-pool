@@ -12,11 +12,22 @@ import {
   pgDeleteClientToken,
   pgIncrementClientTokenUsage
 } from './postgres';
+import { normalizeProvider } from './providers';
+
+function getTokenPrefix(provider) {
+  const normalized = normalizeProvider(provider);
+  return normalized === 'ollama' ? 'client_token:' : `${normalized}:client_token:`;
+}
+
+function getTokenKvKey(provider, token) {
+  return `${getTokenPrefix(provider)}${token}`;
+}
 
 // 验证客户端 Token
-export async function verifyClientToken(token, env) {
+export async function verifyClientToken(token, env, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    const data = await pgGetClientToken(env, token);
+    const data = await pgGetClientToken(env, token, normalized);
     if (!data) {
       return false;
     }
@@ -25,11 +36,11 @@ export async function verifyClientToken(token, env) {
       return false;
     }
 
-    await pgIncrementClientTokenUsage(env, token);
+    await pgIncrementClientTokenUsage(env, token, normalized);
     return true;
   }
 
-  const tokenData = await env.API_KEYS.get(`client_token:${token}`);
+  const tokenData = await env.API_KEYS.get(getTokenKvKey(normalized, token));
   if (!tokenData) {
     return false;
   }
@@ -44,7 +55,8 @@ export async function verifyClientToken(token, env) {
 }
 
 // 创建客户端 Token
-export async function createClientToken(env, name, ttl = null) {
+export async function createClientToken(env, name, ttl = null, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
     const token = generateToken();
     const now = new Date();
@@ -56,7 +68,7 @@ export async function createClientToken(env, name, ttl = null) {
       createdAt: now.toISOString(),
       expiresAt: expiresAt ? expiresAt.toISOString() : null,
       requestCount: 0
-    });
+    }, normalized);
 
     return {
       token,
@@ -76,7 +88,7 @@ export async function createClientToken(env, name, ttl = null) {
     requestCount: 0
   };
 
-  await env.API_KEYS.put(`client_token:${token}`, JSON.stringify(tokenData));
+  await env.API_KEYS.put(getTokenKvKey(normalized, token), JSON.stringify(tokenData));
 
   return {
     token,
@@ -86,9 +98,10 @@ export async function createClientToken(env, name, ttl = null) {
 }
 
 // 列出所有客户端 Token
-export async function listClientTokens(env) {
+export async function listClientTokens(env, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    const rows = await pgListClientTokens(env);
+    const rows = await pgListClientTokens(env, normalized);
     return rows.map(row => ({
       token: row.token,
       name: row.name,
@@ -98,7 +111,7 @@ export async function listClientTokens(env) {
     }));
   }
 
-  const list = await env.API_KEYS.list({ prefix: 'client_token:' });
+  const list = await env.API_KEYS.list({ prefix: getTokenPrefix(normalized) });
   const tokens = [];
 
   for (const key of list.keys) {
@@ -119,13 +132,14 @@ export async function listClientTokens(env) {
 }
 
 // 删除客户端 Token
-export async function deleteClientToken(env, token) {
+export async function deleteClientToken(env, token, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   if (isPostgresEnabled(env)) {
-    await pgDeleteClientToken(env, token);
+    await pgDeleteClientToken(env, token, normalized);
     return true;
   }
 
-  await env.API_KEYS.delete(`client_token:${token}`);
+  await env.API_KEYS.delete(getTokenKvKey(normalized, token));
   return true;
 }
 

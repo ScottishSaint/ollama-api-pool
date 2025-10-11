@@ -14,14 +14,17 @@ import {
 } from './cache';
 import { isRedisEnabled, redisGet, redisScanPattern } from './redis';
 import { isPostgresEnabled, pgImportApiAccountEntries, pgGetGlobalStats, pgListModelStats, pgGetModelHourlyAggregated, pgGetRecentTopModels } from './postgres';
+import { normalizeProvider, getProviderConfig, buildUpstreamHeaders, getDefaultProbeModel } from './providers';
 
 export async function handleAdmin(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
+  const providerParam = normalizeProvider(url.searchParams.get('provider'));
+  const resolveProvider = (body) => body && body.provider ? normalizeProvider(body.provider) : providerParam;
 
   // 公开统计 API（无需鉴权）
   if (path === '/admin/public-stats' && request.method === 'GET') {
-    const stats = await getPublicStats(env);
+    const stats = await getPublicStats(env, providerParam);
     return jsonResponse(stats);
   }
 
@@ -38,32 +41,35 @@ export async function handleAdmin(request, env) {
     const page = parseInt(url.searchParams.get('page')) || 1;
     const pageSize = parseInt(url.searchParams.get('pageSize')) || 50; // 默认每页50个
 
-    const result = await listApiKeysPaginated(env, page, pageSize);
+    const result = await listApiKeysPaginated(env, page, pageSize, providerParam);
     return jsonResponse(result);
 
   } else if (path === '/admin/api-keys' && request.method === 'POST') {
     // 添加 API Key
-    const { username, api_key, apiKey, ttl } = await request.json();
+    const body = await request.json();
+    const provider = resolveProvider(body);
+    const { username, api_key, apiKey, ttl } = body;
     const key = api_key || apiKey;
 
     if (!key) {
       return errorResponse('API Key is required', 400);
     }
 
-    const added = await addApiKey(env, key, username, ttl);
+    const added = await addApiKey(env, key, username, ttl, provider);
     return jsonResponse({ success: added, message: added ? 'Added' : 'Already exists' });
 
   } else if (path === '/admin/api-keys' && request.method === 'DELETE') {
     // 删除单个或批量删除 API Keys
     const body = await request.json();
+    const provider = resolveProvider(body);
 
     if (body.apiKeys && Array.isArray(body.apiKeys)) {
       // 批量删除
-      const result = await batchRemoveApiKeys(env, body.apiKeys);
+      const result = await batchRemoveApiKeys(env, body.apiKeys, provider);
       return jsonResponse(result);
     } else if (body.apiKey) {
       // 单个删除
-      const removed = await removeApiKey(env, body.apiKey);
+      const removed = await removeApiKey(env, body.apiKey, provider);
       return jsonResponse({ success: removed });
     } else {
       return errorResponse('Missing apiKey or apiKeys', 400);
@@ -71,65 +77,76 @@ export async function handleAdmin(request, env) {
 
   } else if (path === '/admin/api-keys/import' && request.method === 'POST') {
     // 批量导入 API Keys
-    const { keys } = await request.json();
-    const result = await importApiKeys(env, keys);
+    const body = await request.json();
+    const provider = resolveProvider(body);
+    const { keys } = body;
+    const result = await importApiKeys(env, keys, provider);
     return jsonResponse(result);
 
   } else if (path === '/admin/api-keys/import-from-txt' && request.method === 'POST') {
     // 从 ollama.txt 格式导入
-    const { content } = await request.json();
-    const keys = parseOllamaTxt(content);
-    const result = await importApiKeys(env, keys);
+    const body = await request.json();
+    const provider = resolveProvider(body);
+    const keys = parseOllamaTxt(body.content);
+    const result = await importApiKeys(env, keys, provider);
     return jsonResponse(result);
 
   } else if (path === '/admin/api-keys/import-with-validation' && request.method === 'POST') {
     // 逐行导入并验证 API Keys
-    const { content } = await request.json();
-    const result = await importAndValidateKeys(env, content);
+    const body = await request.json();
+    const provider = resolveProvider(body);
+    const result = await importAndValidateKeys(env, body.content, provider);
     return jsonResponse(result);
 
   } else if (path === '/admin/tokens' && request.method === 'GET') {
     // 获取客户端 Token 列表
-    const tokens = await listClientTokens(env);
+    const tokens = await listClientTokens(env, providerParam);
     return jsonResponse({ tokens });
 
   } else if (path === '/admin/tokens' && request.method === 'POST') {
     // 创建客户端 Token
-    const { name, expiresIn } = await request.json();
-    const token = await createClientToken(env, name, expiresIn);
+    const body = await request.json();
+    const provider = resolveProvider(body);
+    const { name, expiresIn } = body;
+    const token = await createClientToken(env, name, expiresIn, provider);
     return jsonResponse(token);
 
   } else if (path === '/admin/tokens' && request.method === 'DELETE') {
     // 删除客户端 Token
-    const { token } = await request.json();
-    await deleteClientToken(env, token);
+    const body = await request.json();
+    const provider = resolveProvider(body);
+    await deleteClientToken(env, body.token, provider);
     return jsonResponse({ success: true });
 
   } else if (path === '/admin/stats' && request.method === 'GET') {
     // 获取统计信息
-    const stats = await getStats(env);
+    const stats = await getStats(env, providerParam);
     return jsonResponse(stats);
 
   } else if (path === '/admin/keys/stats' && request.method === 'GET') {
     // 获取所有 API Key 的详细统计
-    const keyStats = await getAllKeyStats(env);
+    const keyStats = await getAllKeyStats(env, providerParam);
     return jsonResponse({ stats: keyStats });
 
   } else if (path === '/admin/keys/enable' && request.method === 'POST') {
     // 手动启用 API Key
-    const { apiKey } = await request.json();
-    await enableApiKey(env, apiKey);
+    const body = await request.json();
+    const provider = resolveProvider(body);
+    await enableApiKey(env, body.apiKey, provider);
     return jsonResponse({ success: true, message: 'API Key enabled' });
 
   } else if (path === '/admin/keys/disable' && request.method === 'POST') {
     // 手动禁用 API Key
-    const { apiKey, duration } = await request.json();
-    await disableApiKey(env, apiKey, duration || 3600);
+    const body = await request.json();
+    const provider = resolveProvider(body);
+    await disableApiKey(env, body.apiKey, body.duration || 3600, provider);
     return jsonResponse({ success: true, message: 'API Key disabled' });
 
   } else if (path === '/admin/keys/health-check' && request.method === 'POST') {
     // 批量健康检查
-    const results = await healthCheckAll(env);
+    const body = await request.json().catch(() => ({}));
+    const provider = resolveProvider(body);
+    const results = await healthCheckAll(env, provider);
     return jsonResponse({ results });
 
   } else if (path === '/admin/cache/stats' && request.method === 'GET') {
@@ -139,32 +156,36 @@ export async function handleAdmin(request, env) {
 
   } else if (path === '/admin/cache/clear' && request.method === 'POST') {
     // 清除所有缓存
-    const { pattern } = await request.json();
+    const body = await request.json();
+    const provider = resolveProvider(body);
+    const { pattern, scope } = body;
     if (pattern) {
-      await invalidateCache(env, pattern);
+      await invalidateCache(env, pattern, provider);
       return jsonResponse({ success: true, message: `清除缓存: ${pattern}*` });
     } else {
-      await clearAllCache(env);
-      return jsonResponse({ success: true, message: '已清除所有缓存' });
+      await clearAllCache(env, scope === 'all' ? 'all' : provider);
+      return jsonResponse({ success: true, message: scope === 'all' ? '已清除所有缓存' : '已清除指定提供方缓存' });
     }
 
   } else if (path === '/admin/import' && request.method === 'POST') {
     // 批量导入账号（支持多种格式）
-    const { accounts } = await request.json();
-    const result = await importAccountsFlexible(env, accounts);
+    const body = await request.json();
+    const provider = resolveProvider(body);
+    const result = await importAccountsFlexible(env, body.accounts, provider);
     return jsonResponse(result);
 
   } else if (path === '/admin/verify-key' && request.method === 'POST') {
     // 验证单个 API Key
-    const { apiKey } = await request.json();
-    const result = await verifyApiKey(env, apiKey);
+    const body = await request.json();
+    const provider = resolveProvider(body);
+    const result = await verifyApiKey(env, body.apiKey, provider);
     return jsonResponse(result);
 
   } else if (path.startsWith('/admin/api-keys/')) {
     // 删除单个 API Key (DELETE /admin/api-keys/{key})
     const apiKey = decodeURIComponent(path.substring('/admin/api-keys/'.length));
     if (request.method === 'DELETE') {
-      await removeApiKey(env, apiKey);
+      await removeApiKey(env, apiKey, providerParam);
       return jsonResponse({ success: true });
     }
 
@@ -172,19 +193,20 @@ export async function handleAdmin(request, env) {
     // 删除单个客户端 Token (DELETE /admin/client-tokens/{token})
     const token = decodeURIComponent(path.substring('/admin/client-tokens/'.length));
     if (request.method === 'DELETE') {
-      await deleteClientToken(env, token);
+      await deleteClientToken(env, token, providerParam);
       return jsonResponse({ success: true });
     }
 
   } else if (path === '/admin/client-tokens' && request.method === 'GET') {
     // 获取客户端 Token 列表
-    const tokens = await listClientTokens(env);
+    const tokens = await listClientTokens(env, providerParam);
     return jsonResponse({ client_tokens: tokens });
 
   } else if (path === '/admin/client-tokens' && request.method === 'POST') {
     // 生成新的客户端 Token
-    const { name, ttl } = await request.json();
-    const token = await createClientToken(env, name || '未命名', ttl);
+    const body = await request.json();
+    const provider = resolveProvider(body);
+    const token = await createClientToken(env, body.name || '未命名', body.ttl, provider);
     return jsonResponse({ token: token.token, name: token.name });
 
   } else {
@@ -214,35 +236,47 @@ function parseOllamaTxt(content) {
 }
 
 // 获取统计信息（含全局请求统计，带缓存）
-async function getStats(env) {
-  // 尝试从缓存获取
-  const cached = await getCachedStats(env, 'global');
+async function getStats(env, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
+
+  const cached = await getCachedStats(env, 'global', normalized);
   if (cached) {
     return cached;
   }
 
   const usePostgres = isPostgresEnabled(env);
 
-  // 获取 API Keys 与客户端 Token 信息
-  const clientTokens = await listClientTokens(env);
-  const totalApiKeys = await countApiKeys(env);
-
-  const apiKeys = await listApiKeys(env);
+  const clientTokens = await listClientTokens(env, normalized);
+  const totalApiKeys = await countApiKeys(env, normalized);
+  const apiKeys = await listApiKeys(env, normalized);
 
   const totalClientTokens = Array.isArray(clientTokens) ? clientTokens.length : 0;
   const failedKeys = Array.isArray(apiKeys)
     ? apiKeys.filter(item => item.status && item.status !== 'active').length
     : 0;
 
-  // 获取全局统计数据
-  const globalStatsData = await env.API_KEYS.get('global_stats');
-  const globalStats = globalStatsData ? JSON.parse(globalStatsData) : {
-    totalRequests: 0,
-    successCount: 0,
-    failureCount: 0
-  };
+  let globalStats = null;
+  if (usePostgres) {
+    globalStats = await pgGetGlobalStats(env, normalized);
+    if (globalStats) {
+      globalStats = {
+        totalRequests: globalStats.totalRequests || 0,
+        successCount: globalStats.successCount || 0,
+        failureCount: globalStats.failureCount || 0
+      };
+    }
+  }
 
-  // 计算成功率
+  if (!globalStats) {
+    const kvKey = normalized === 'ollama' ? 'global_stats' : `${normalized}:global_stats`;
+    const globalStatsData = await env.API_KEYS.get(kvKey);
+    globalStats = globalStatsData ? JSON.parse(globalStatsData) : {
+      totalRequests: 0,
+      successCount: 0,
+      failureCount: 0
+    };
+  }
+
   const successRate = globalStats.totalRequests > 0
     ? ((globalStats.successCount / globalStats.totalRequests) * 100).toFixed(2)
     : '0.00';
@@ -263,16 +297,16 @@ async function getStats(env) {
     timestamp: new Date().toISOString()
   };
 
-  // 缓存结果
-  await setCachedStats(env, 'global', stats);
+  await setCachedStats(env, 'global', stats, normalized);
 
   return stats;
 }
 
 // 分页获取 API Keys（优化版 - 快速版本，不查询每个key的详细状态）
-async function listApiKeysPaginated(env, page = 1, pageSize = 50) {
-  const total = await countApiKeys(env);
-  const allKeys = await listApiKeys(env);
+async function listApiKeysPaginated(env, page = 1, pageSize = 50, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
+  const total = await countApiKeys(env, normalized);
+  const allKeys = await listApiKeys(env, normalized);
   const totalPages = Math.ceil(total / pageSize);
 
   // 分页切片
@@ -290,18 +324,21 @@ async function listApiKeysPaginated(env, page = 1, pageSize = 50) {
 }
 
 // 验证单个 API Key
-async function validateApiKey(apiKey) {
+async function validateApiKey(env, apiKey, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
+  const config = getProviderConfig(normalized);
+  const defaultModel = getDefaultProbeModel(normalized);
+  const headers = buildUpstreamHeaders(normalized, apiKey, env, {
+    Accept: '*/*',
+    'Cache-Control': 'no-cache'
+  });
+
   try {
-    const response = await fetch('https://ollama.com/v1/chat/completions', {
+    const response = await fetch(config.upstream.chatCompletions, {
       method: 'POST',
-      headers: {
-        'Accept': '*/*',
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache'
-      },
+      headers,
       body: JSON.stringify({
-        model: 'kimi-k2:1t',
+        model: defaultModel,
         messages: [
           { role: 'system', content: 'test' },
           { role: 'user', content: 'hi' }
@@ -311,23 +348,21 @@ async function validateApiKey(apiKey) {
       })
     });
 
-    // 验证成功条件: 200-299 状态码
     if (response.ok) {
-      // 尝试获取模型信息以进一步分类
-      const modelInfo = await getModelInfo(apiKey);
+      const modelInfo = await getModelInfo(env, apiKey, normalized);
       return {
         valid: true,
         status: response.status,
         category: modelInfo.category || 'general',
-        model: modelInfo.model || 'kimi-k2:1t'
-      };
-    } else {
-      return {
-        valid: false,
-        status: response.status,
-        error: await response.text()
+        model: modelInfo.model || defaultModel
       };
     }
+
+    return {
+      valid: false,
+      status: response.status,
+      error: await response.text()
+    };
   } catch (error) {
     return {
       valid: false,
@@ -337,43 +372,40 @@ async function validateApiKey(apiKey) {
 }
 
 // 获取模型信息用于分类
-async function getModelInfo(apiKey) {
+async function getModelInfo(env, apiKey, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
+  const config = getProviderConfig(normalized);
+  const headers = buildUpstreamHeaders(normalized, apiKey, env);
+  delete headers['Content-Type'];
+
   try {
-    const response = await fetch('https://ollama.com/api/tags', {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`
-      }
-    });
+    const response = await fetch(config.upstream.models, { headers });
 
     if (response.ok) {
       const data = await response.json();
-      // 根据可用模型进行分类
-      const models = data.models || [];
+      const models = Array.isArray(data.models) ? data.models : (Array.isArray(data.data) ? data.data : []);
       if (models.length > 0) {
-        // 简单分类逻辑
-        const firstModel = models[0].name || models[0].model;
+        const first = models[0].name || models[0].model || models[0].id;
+        const lower = first ? first.toLowerCase() : '';
         let category = 'general';
 
-        if (firstModel.includes('kimi')) {
-          category = 'kimi';
-        } else if (firstModel.includes('llama')) {
-          category = 'llama';
-        } else if (firstModel.includes('qwen')) {
-          category = 'qwen';
-        }
+        if (lower.includes('kimi')) category = 'kimi';
+        else if (lower.includes('llama')) category = 'llama';
+        else if (lower.includes('qwen')) category = 'qwen';
 
-        return { category, model: firstModel };
+        return { category, model: first || 'unknown' };
       }
     }
   } catch (error) {
-    // 获取失败,使用默认分类
+    // ignore
   }
 
   return { category: 'general', model: 'unknown' };
 }
 
 // 导入并验证 API Keys
-async function importAndValidateKeys(env, content) {
+async function importAndValidateKeys(env, content, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   const lines = content.split('\n').map(line => line.trim()).filter(line => line);
 
   const results = {
@@ -383,15 +415,12 @@ async function importAndValidateKeys(env, content) {
     categories: {}
   };
 
-  // 验证每个 key
   for (const apiKey of lines) {
-    const validation = await validateApiKey(apiKey);
+    const validation = await validateApiKey(env, apiKey, normalized);
 
     if (validation.valid) {
-      // 添加到 KV
-      await addApiKey(env, apiKey);
+      await addApiKey(env, apiKey, null, null, normalized);
 
-      // 保存分类信息
       const category = validation.category || 'general';
       const keyInfo = {
         key: apiKey.substring(0, 20) + '...',
@@ -403,14 +432,13 @@ async function importAndValidateKeys(env, content) {
 
       results.valid.push(keyInfo);
 
-      // 统计分类
       if (!results.categories[category]) {
         results.categories[category] = [];
       }
       results.categories[category].push(keyInfo);
 
-      // 保存分类到 KV
-      await env.API_KEYS.put(`key_category:${apiKey}`, JSON.stringify({
+      const prefix = normalized === 'ollama' ? '' : `${normalized}:`;
+      await env.API_KEYS.put(`${prefix}key_category:${apiKey}`, JSON.stringify({
         category,
         model: validation.model,
         verifiedAt: new Date().toISOString()
@@ -430,63 +458,62 @@ async function importAndValidateKeys(env, content) {
 /**
  * 验证单个 API Key 并更新状态
  */
-async function verifyApiKey(env, apiKey) {
+async function verifyApiKey(env, apiKey, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   try {
-    // 计算 API Key 的哈希值
-    const keyHash = await hashApiKey(apiKey);
+    const validation = await validateApiKey(env, apiKey, normalized);
 
-    // 使用 Ollama API 进行验证
-    const response = await fetch('https://ollama.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Accept': '*/*',
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache'
-      },
-      body: JSON.stringify({
-        model: 'kimi-k2:1t',
-        messages: [
-          { role: 'system', content: 'test' },
-          { role: 'user', content: 'hi' }
-        ],
-        stream: true,
-        stream_options: { include_usage: true }
-      })
-    });
-
-    const isValid = response.ok;
-
-    // 更新 API Key 状态
-    const metadata = await env.API_KEYS.get(`key_metadata:${keyHash}`);
-    if (metadata) {
-      const meta = JSON.parse(metadata);
-      meta.status = isValid ? 'active' : 'failed';
-      meta.lastVerified = new Date().toISOString();
-      if (!isValid) {
-        meta.failureReason = `HTTP ${response.status}`;
+    if (isPostgresEnabled(env)) {
+      if (validation.valid) {
+        await enableApiKey(env, apiKey, normalized);
+      } else {
+        await disableApiKey(env, apiKey, 0, normalized);
+        await markApiKeyFailed(env, apiKey, normalized);
       }
-      await env.API_KEYS.put(`key_metadata:${keyHash}`, JSON.stringify(meta));
+    } else {
+      const keyHash = await hashApiKey(apiKey);
+      const prefix = normalized === 'ollama' ? '' : `${normalized}:`;
+      const metadataKey = `${prefix}key_metadata:${keyHash}`;
+      const metadata = await env.API_KEYS.get(metadataKey);
+      if (metadata) {
+        const meta = JSON.parse(metadata);
+        meta.status = validation.valid ? 'active' : 'failed';
+        meta.lastVerified = new Date().toISOString();
+        if (validation.valid) {
+          delete meta.failureReason;
+        } else {
+          meta.failureReason = validation.error || `HTTP ${validation.status || 500}`;
+        }
+        await env.API_KEYS.put(metadataKey, JSON.stringify(meta));
+      }
+
+      if (!validation.valid) {
+        await markApiKeyFailed(env, apiKey, normalized);
+      }
     }
 
     return {
-      valid: isValid,
-      status: response.status,
+      valid: validation.valid,
+      status: validation.status || (validation.valid ? 200 : 500),
+      error: validation.valid ? undefined : validation.error,
       apiKey: apiKey.substring(0, 8) + '...' + apiKey.substring(apiKey.length - 8),
       timestamp: new Date().toISOString()
     };
   } catch (error) {
-    // 计算哈希值用于更新失败状态
-    const keyHash = await hashApiKey(apiKey);
-
-    // 更新为失败状态
-    const metadata = await env.API_KEYS.get(`key_metadata:${keyHash}`);
-    if (metadata) {
-      const meta = JSON.parse(metadata);
-      meta.status = 'failed';
-      meta.lastVerified = new Date().toISOString();
-      meta.failureReason = error.message;
-      await env.API_KEYS.put(`key_metadata:${keyHash}`, JSON.stringify(meta));
+    if (!isPostgresEnabled(env)) {
+      const keyHash = await hashApiKey(apiKey);
+      const prefix = normalized === 'ollama' ? '' : `${normalized}:`;
+      const metadataKey = `${prefix}key_metadata:${keyHash}`;
+      const metadata = await env.API_KEYS.get(metadataKey);
+      if (metadata) {
+        const meta = JSON.parse(metadata);
+        meta.status = 'failed';
+        meta.lastVerified = new Date().toISOString();
+        meta.failureReason = error.message;
+        await env.API_KEYS.put(metadataKey, JSON.stringify(meta));
+      }
+    } else {
+      await markApiKeyFailed(env, apiKey, normalized);
     }
 
     return {
@@ -673,10 +700,11 @@ async function batchRemoveApiKeys(env, apiKeys) {
 /**
  * 获取公开统计数据（供前端图表使用，带缓存）
  */
-async function getPublicStats(env) {
+async function getPublicStats(env, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   try {
     // 尝试从缓存获取
-    const cached = await getCachedStats(env, 'public');
+    const cached = await getCachedStats(env, 'public', normalized);
     if (cached) {
       return cached;
     }
@@ -692,7 +720,7 @@ async function getPublicStats(env) {
     };
 
     if (usePostgres) {
-      const pgStats = await pgGetGlobalStats(env);
+      const pgStats = await pgGetGlobalStats(env, normalized);
       if (pgStats) {
         globalStats = {
           totalRequests: pgStats.totalRequests,
@@ -706,7 +734,8 @@ async function getPublicStats(env) {
     }
 
     if (!usePostgres || (globalStats.totalRequests === 0 && globalStats.successCount === 0 && globalStats.failureCount === 0 && !globalStats.lastUpdated)) {
-      const globalStatsData = await env.API_KEYS.get('global_stats');
+      const kvKey = normalized === 'ollama' ? 'global_stats' : `${normalized}:global_stats`;
+      const globalStatsData = await env.API_KEYS.get(kvKey);
       if (globalStatsData) {
         const kvStats = JSON.parse(globalStatsData);
         globalStats = {
@@ -718,8 +747,8 @@ async function getPublicStats(env) {
       }
     }
 
-    const totalApiKeys = await countApiKeys(env);
-    const apiKeyList = await listApiKeys(env);
+    const totalApiKeys = await countApiKeys(env, normalized);
+    const apiKeyList = await listApiKeys(env, normalized);
     const failedKeys = Array.isArray(apiKeyList)
       ? apiKeyList.filter(item => item.status && item.status !== 'active').length
       : 0;
@@ -769,7 +798,8 @@ async function getPublicStats(env) {
 
     if (useRedis) {
       try {
-        const redisKeys = await redisScanPattern(env, 'model_stats:*');
+        const redisPattern = normalized === 'ollama' ? 'model_stats:*' : `${normalized}:model_stats:*`;
+        const redisKeys = await redisScanPattern(env, redisPattern);
         for (const key of redisKeys) {
           const raw = await redisGet(env, key);
           if (raw) {
@@ -787,7 +817,7 @@ async function getPublicStats(env) {
 
     if (usePostgres) {
       try {
-        const pgModels = await pgListModelStats(env, 10);
+        const pgModels = await pgListModelStats(env, 10, normalized);
         pgModels.forEach(row => addModelStats({
           model: row.model,
           totalRequests: row.total_requests || 0,
@@ -801,7 +831,8 @@ async function getPublicStats(env) {
     }
 
     if (modelAccumulator.size === 0 && isKvStorageEnabled(env)) {
-      const modelStatsList = await env.API_KEYS.list({ prefix: 'model_stats:' });
+      const prefix = normalized === 'ollama' ? 'model_stats:' : `${normalized}:model_stats:`;
+      const modelStatsList = await env.API_KEYS.list({ prefix });
 
       for (const item of modelStatsList.keys) {
         const data = await env.API_KEYS.get(item.name);
@@ -832,19 +863,19 @@ async function getPublicStats(env) {
     // 获取最近24小时每小时的统计
     let hourlyStats = [];
     if (usePostgres) {
-      hourlyStats = await getHourlyStatsFromPostgres(env, 24);
+      hourlyStats = await getHourlyStatsFromPostgres(env, 24, normalized);
     }
     if (!hourlyStats.length) {
-      hourlyStats = await getHourlyStats(env, 24);
+      hourlyStats = await getHourlyStats(env, 24, normalized);
     }
 
     // 获取最近24小时的Top3模型
     let recentTopModels = [];
     if (usePostgres) {
-      recentTopModels = await getRecentTopModelsFromPostgres(env, 24, 3);
+      recentTopModels = await getRecentTopModelsFromPostgres(env, 24, 3, normalized);
     }
     if (!recentTopModels.length) {
-      recentTopModels = await getRecentTopModels(env, 24, 3);
+      recentTopModels = await getRecentTopModels(env, 24, 3, normalized);
     }
 
     const generatedAt = new Date().toISOString();
@@ -885,7 +916,7 @@ async function getPublicStats(env) {
     };
 
     // 缓存结果
-    await setCachedStats(env, 'public', result);
+    await setCachedStats(env, 'public', result, normalized);
 
     return result;
   } catch (error) {
@@ -932,7 +963,8 @@ async function getPublicStats(env) {
 /**
  * 获取最近N小时的每小时统计
  */
-async function getHourlyStats(env, hours) {
+async function getHourlyStats(env, hours, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   try {
     const now = new Date();
     const stats = [];
@@ -942,7 +974,8 @@ async function getHourlyStats(env, hours) {
 
     if (isRedisEnabled(env)) {
       try {
-        const redisKeys = await redisScanPattern(env, 'model_hourly:*');
+        const redisPattern = normalized === 'ollama' ? 'model_hourly:*' : `${normalized}:model_hourly:*`;
+        const redisKeys = await redisScanPattern(env, redisPattern);
         if (redisKeys.length > 0) {
           for (const key of redisKeys) {
             try {
@@ -969,7 +1002,7 @@ async function getHourlyStats(env, hours) {
     }
 
     if (!dataLoaded && isKvStorageEnabled(env)) {
-      const hourlyList = await env.API_KEYS.list({ prefix: `model_hourly:`, limit: 1000 });
+      const hourlyList = await env.API_KEYS.list({ prefix: normalized === 'ollama' ? 'model_hourly:' : `${normalized}:model_hourly:`, limit: 1000 });
 
       for (const item of hourlyList.keys) {
         try {
@@ -1027,7 +1060,8 @@ async function getHourlyStats(env, hours) {
 /**
  * 获取最近N小时的Top N模型
  */
-async function getRecentTopModels(env, hours, topN = 3) {
+async function getRecentTopModels(env, hours, topN = 3, provider = 'ollama') {
+  const normalized = normalizeProvider(provider);
   try {
     const now = new Date();
     const modelMap = new Map();
@@ -1042,7 +1076,8 @@ async function getRecentTopModels(env, hours, topN = 3) {
 
     if (isRedisEnabled(env)) {
       try {
-        const redisKeys = await redisScanPattern(env, 'model_hourly:*');
+        const redisPattern = normalized === 'ollama' ? 'model_hourly:*' : `${normalized}:model_hourly:*`;
+        const redisKeys = await redisScanPattern(env, redisPattern);
         if (redisKeys.length > 0) {
           for (const key of redisKeys) {
             try {
@@ -1072,7 +1107,7 @@ async function getRecentTopModels(env, hours, topN = 3) {
     }
 
     if (!dataLoaded && isKvStorageEnabled(env)) {
-      const hourlyList = await env.API_KEYS.list({ prefix: `model_hourly:`, limit: 1000 });
+      const hourlyList = await env.API_KEYS.list({ prefix: normalized === 'ollama' ? 'model_hourly:' : `${normalized}:model_hourly:`, limit: 1000 });
 
       for (const item of hourlyList.keys) {
         try {
@@ -1118,9 +1153,9 @@ async function getRecentTopModels(env, hours, topN = 3) {
   }
 }
 
-async function getHourlyStatsFromPostgres(env, hours) {
+async function getHourlyStatsFromPostgres(env, hours, provider = 'ollama') {
   try {
-    const rows = await pgGetModelHourlyAggregated(env, { hours });
+    const rows = await pgGetModelHourlyAggregated(env, { hours }, normalizeProvider(provider));
     if (!Array.isArray(rows) || rows.length === 0) {
       return [];
     }
@@ -1158,9 +1193,9 @@ async function getHourlyStatsFromPostgres(env, hours) {
   }
 }
 
-async function getRecentTopModelsFromPostgres(env, hours, topN) {
+async function getRecentTopModelsFromPostgres(env, hours, topN, provider = 'ollama') {
   try {
-    const rows = await pgGetRecentTopModels(env, { hours, limit: topN });
+    const rows = await pgGetRecentTopModels(env, { hours, limit: topN }, normalizeProvider(provider));
     if (!Array.isArray(rows) || rows.length === 0) {
       return [];
     }

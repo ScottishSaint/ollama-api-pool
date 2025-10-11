@@ -7,7 +7,7 @@ export const dashboardHtml = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ollama API Pool 管理中心</title>
+    <title>{{PROVIDER_LABEL}} API Pool 管理中心</title>
     <script src="https://proxy.jhun.edu.kg/proxy/cdn.tailwindcss.com/"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script>
@@ -37,7 +37,7 @@ export const dashboardHtml = `<!DOCTYPE html>
                     <span class="text-2xl">🧭</span>
                 </div>
                 <div>
-                    <p class="text-sm font-medium text-primary uppercase tracking-widest">Ollama API Pool</p>
+                    <p class="text-sm font-medium text-primary uppercase tracking-widest" data-provider-text="badge">Ollama API Pool</p>
                     <h1 class="text-lg font-semibold text-slate-900">统一代理池 · 管理控制台</h1>
                 </div>
             </div>
@@ -56,13 +56,19 @@ export const dashboardHtml = `<!DOCTYPE html>
     </nav>
 
     <main class="max-w-7xl mx-auto px-6 py-10 space-y-12">
+        <div class="flex justify-end">
+            <div class="inline-flex rounded-full border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <button type="button" data-provider-option="ollama" class="px-4 py-2 text-xs sm:text-sm font-medium bg-primary text-white">Ollama</button>
+                <button type="button" data-provider-option="openrouter" class="px-4 py-2 text-xs sm:text-sm font-medium bg-white text-slate-600 hover:bg-slate-100">OpenRouter</button>
+            </div>
+        </div>
         <section class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] items-start">
             <article class="bg-white rounded-3xl soft-border card-shadow p-8">
                 <span class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                     实时运维总览
                 </span>
-                <h2 class="mt-4 text-3xl lg:text-4xl font-bold text-slate-900 leading-tight">构建稳定的 Ollama API 代理池</h2>
-                <p class="mt-4 text-base text-slate-600 leading-relaxed">
+                <h2 class="mt-4 text-3xl lg:text-4xl font-bold text-slate-900 leading-tight" data-provider-text="hero-title">构建稳定的 Ollama API 代理池</h2>
+                <p class="mt-4 text-base text-slate-600 leading-relaxed" data-provider-text="hero-desc">
                     通过统一入口管理多账户，自动完成负载均衡、故障转移与请求统计，确保业务持续可用。下方指标实时反映池子健康度，可直接跳转到关键操作面板。
                 </p>
                 <ul class="mt-6 space-y-3 text-sm text-slate-600">
@@ -393,6 +399,6 @@ export const dashboardHtml = `<!DOCTYPE html>
         </div>
     </footer>
 
-    <script src="/js/dashboard.js?v=12"></script>
+    <script src="/js/dashboard.js?v=13"></script>
 </body>
 </html>`;

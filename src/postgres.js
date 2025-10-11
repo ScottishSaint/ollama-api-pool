@@ -4,10 +4,9 @@
  * 当未配置相关环境变量时，所有函数返回 null/false，调用方将回退到 KV 模式。
  */
 
-const ACTIVE_KEYS_CACHE = {
-  data: [],
-  expires: 0
-};
+import { getTablePrefix, normalizeProvider } from './providers';
+
+const ACTIVE_KEYS_CACHE = new Map();
 
 function parseProjectRef(databaseUrl) {
   try {
@@ -40,6 +39,34 @@ function getRestBase(env) {
 
 export function isPostgresEnabled(env) {
   return Boolean(env && env.DATABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && getRestBase(env));
+}
+
+function getActiveCache(provider) {
+  const key = normalizeProvider(provider);
+  if (!ACTIVE_KEYS_CACHE.has(key)) {
+    ACTIVE_KEYS_CACHE.set(key, { data: [], expires: 0 });
+  }
+  return ACTIVE_KEYS_CACHE.get(key);
+}
+
+function clearActiveKeysCache(provider) {
+  if (provider) {
+    ACTIVE_KEYS_CACHE.delete(normalizeProvider(provider));
+    return;
+  }
+  ACTIVE_KEYS_CACHE.clear();
+}
+
+function getTables(provider) {
+  const prefix = getTablePrefix(provider);
+  return {
+    keys: `${prefix}_keys`,
+    keyStats: `${prefix}_key_stats`,
+    clientTokens: `${prefix}_client_tokens`,
+    globalStats: `${prefix}_global_stats`,
+    modelStats: `${prefix}_model_stats`,
+    modelHourly: `${prefix}_model_hourly`
+  };
 }
 
 function buildHeaders(env, { hasBody = false, prefer, single, extraHeaders } = {}) {
@@ -133,11 +160,6 @@ async function pgRequest(env, {
   }
 }
 
-function clearActiveKeysCache() {
-  ACTIVE_KEYS_CACHE.data = [];
-  ACTIVE_KEYS_CACHE.expires = 0;
-}
-
 function normalizeKeyStatus(row) {
   const now = Date.now();
   const disabledUntil = row.disabled_until ? new Date(row.disabled_until).getTime() : null;
@@ -166,9 +188,10 @@ function mapKeyRow(row) {
   };
 }
 
-export async function pgListApiKeys(env) {
+export async function pgListApiKeys(env, provider = 'ollama') {
+  const tables = getTables(provider);
   const rows = await pgRequest(env, {
-    table: 'ollama_api_keys',
+    table: tables.keys,
     query: {
       select: 'api_key,username,status,created_at,expires_at,failed_until,disabled_until'
     }
@@ -181,9 +204,10 @@ export async function pgListApiKeys(env) {
   return rows.map(mapKeyRow);
 }
 
-async function pgListApiKeysRaw(env) {
+async function pgListApiKeysRaw(env, provider = 'ollama') {
+  const tables = getTables(provider);
   const rows = await pgRequest(env, {
-    table: 'ollama_api_keys',
+    table: tables.keys,
     query: {
       select: 'api_key,username,status,created_at,expires_at,failed_until,disabled_until'
     }
@@ -191,25 +215,27 @@ async function pgListApiKeysRaw(env) {
   return Array.isArray(rows) ? rows : [];
 }
 
-export async function pgListActiveApiKeys(env) {
+export async function pgListActiveApiKeys(env, provider = 'ollama') {
+  const cache = getActiveCache(provider);
   const now = Date.now();
-  if (ACTIVE_KEYS_CACHE.expires > now) {
-    return ACTIVE_KEYS_CACHE.data;
+  if (cache.expires > now) {
+    return cache.data;
   }
 
-  const rows = await pgListApiKeysRaw(env);
+  const rows = await pgListApiKeysRaw(env, provider);
   const active = rows
     .filter(row => normalizeKeyStatus(row) === 'active')
     .map(row => row.api_key);
 
-  ACTIVE_KEYS_CACHE.data = active;
-  ACTIVE_KEYS_CACHE.expires = now + 10000; // 缓存 10 秒
+  cache.data = active;
+  cache.expires = now + 10000; // 缓存 10 秒
   return active;
 }
 
-async function pgGetKey(env, apiKey) {
+async function pgGetKey(env, apiKey, provider = 'ollama') {
+  const tables = getTables(provider);
   return await pgRequest(env, {
-    table: 'ollama_api_keys',
+    table: tables.keys,
     query: {
       select: 'api_key,username,status,created_at,expires_at,failed_until,disabled_until,consecutive_failures',
       api_key: `eq.${apiKey}`
@@ -218,8 +244,9 @@ async function pgGetKey(env, apiKey) {
   });
 }
 
-export async function pgAddApiKey(env, apiKey, username = null, ttl = null) {
-  const existing = await pgGetKey(env, apiKey);
+export async function pgAddApiKey(env, apiKey, username = null, ttl = null, provider = 'ollama') {
+  const tables = getTables(provider);
+  const existing = await pgGetKey(env, apiKey, provider);
   if (existing) {
     return false;
   }
@@ -238,30 +265,31 @@ export async function pgAddApiKey(env, apiKey, username = null, ttl = null) {
 
   const result = await pgRequest(env, {
     method: 'POST',
-    table: 'ollama_api_keys',
+    table: tables.keys,
     body,
     prefer: 'resolution=ignore-duplicates,return=minimal'
   });
 
-  clearActiveKeysCache();
+  clearActiveKeysCache(provider);
   return result !== null;
 }
 
-export async function pgRemoveApiKey(env, apiKey) {
+export async function pgRemoveApiKey(env, apiKey, provider = 'ollama') {
+  const tables = getTables(provider);
   const result = await pgRequest(env, {
     method: 'DELETE',
-    table: 'ollama_api_keys',
+    table: tables.keys,
     query: {
       api_key: `eq.${apiKey}`
     },
     prefer: 'return=representation'
   });
 
-  clearActiveKeysCache();
+  clearActiveKeysCache(provider);
   return Array.isArray(result) ? result.length > 0 : Boolean(result);
 }
 
-export async function pgImportApiKeys(env, keys, username = null, ttl = null) {
+export async function pgImportApiKeys(env, keys, username = null, ttl = null, provider = 'ollama') {
   if (!Array.isArray(keys) || keys.length === 0) {
     return {
       total: 0,
@@ -270,11 +298,12 @@ export async function pgImportApiKeys(env, keys, username = null, ttl = null) {
     };
   }
 
+  const tables = getTables(provider);
   const { uniqueEntries, duplicateCount, beforeCount } = await prepareSupabaseImport(env, keys.map(key => ({
     apiKey: key,
     username: username || 'N/A',
     ttl
-  })));
+  })), provider);
 
   if (uniqueEntries.length === 0) {
     return {
@@ -304,15 +333,15 @@ export async function pgImportApiKeys(env, keys, username = null, ttl = null) {
 
     await pgRequest(env, {
       method: 'POST',
-      table: 'ollama_api_keys',
+      table: tables.keys,
       body: chunk,
       prefer: 'resolution=ignore-duplicates,return=minimal'
     });
   }
 
-  clearActiveKeysCache();
+  clearActiveKeysCache(provider);
 
-  const added = await countInsertedRows(env, beforeCount);
+  const added = await countInsertedRows(env, beforeCount, provider);
 
   return {
     total: keys.length,
@@ -322,7 +351,7 @@ export async function pgImportApiKeys(env, keys, username = null, ttl = null) {
   };
 }
 
-export async function pgImportApiAccountEntries(env, entries) {
+export async function pgImportApiAccountEntries(env, entries, provider = 'ollama') {
   if (!Array.isArray(entries) || entries.length === 0) {
     return {
       total: 0,
@@ -332,7 +361,8 @@ export async function pgImportApiAccountEntries(env, entries) {
     };
   }
 
-  const { uniqueEntries, duplicateCount, beforeCount } = await prepareSupabaseImport(env, entries);
+  const tables = getTables(provider);
+  const { uniqueEntries, duplicateCount, beforeCount } = await prepareSupabaseImport(env, entries, provider);
 
   if (uniqueEntries.length === 0) {
     return {
@@ -362,15 +392,15 @@ export async function pgImportApiAccountEntries(env, entries) {
 
     await pgRequest(env, {
       method: 'POST',
-      table: 'ollama_api_keys',
+      table: tables.keys,
       body: chunk,
       prefer: 'resolution=ignore-duplicates,return=minimal'
     });
   }
 
-  clearActiveKeysCache();
+  clearActiveKeysCache(provider);
 
-  const added = await countInsertedRows(env, beforeCount);
+  const added = await countInsertedRows(env, beforeCount, provider);
 
   return {
     total: entries.length,
@@ -380,14 +410,15 @@ export async function pgImportApiAccountEntries(env, entries) {
   };
 }
 
-export async function pgCountApiKeys(env) {
+export async function pgCountApiKeys(env, provider = 'ollama') {
   const base = getRestBase(env);
   if (!base) {
     return 0;
   }
 
   try {
-    const url = `${base}/ollama_api_keys?select=api_key`;
+    const tables = getTables(provider);
+    const url = `${base}/${tables.keys}?select=api_key`;
     const headers = buildHeaders(env, {
       prefer: 'count=exact',
       extraHeaders: {
@@ -426,8 +457,9 @@ export async function pgCountApiKeys(env) {
   }
 }
 
-export async function pgMarkApiKeyFailed(env, apiKey, disableAfterConsecutive = 3, ttlSeconds = 3600) {
-  const row = await pgGetKey(env, apiKey);
+export async function pgMarkApiKeyFailed(env, apiKey, disableAfterConsecutive = 3, ttlSeconds = 3600, provider = 'ollama') {
+  const tables = getTables(provider);
+  const row = await pgGetKey(env, apiKey, provider);
   if (!row) {
     return;
   }
@@ -448,7 +480,7 @@ export async function pgMarkApiKeyFailed(env, apiKey, disableAfterConsecutive = 
 
   await pgRequest(env, {
     method: 'PATCH',
-    table: 'ollama_api_keys',
+    table: tables.keys,
     query: {
       api_key: `eq.${apiKey}`
     },
@@ -456,13 +488,14 @@ export async function pgMarkApiKeyFailed(env, apiKey, disableAfterConsecutive = 
     prefer: 'return=minimal'
   });
 
-  clearActiveKeysCache();
+  clearActiveKeysCache(provider);
 }
 
-export async function pgEnableApiKey(env, apiKey) {
+export async function pgEnableApiKey(env, apiKey, provider = 'ollama') {
+  const tables = getTables(provider);
   await pgRequest(env, {
     method: 'PATCH',
-    table: 'ollama_api_keys',
+    table: tables.keys,
     query: {
       api_key: `eq.${apiKey}`
     },
@@ -475,17 +508,18 @@ export async function pgEnableApiKey(env, apiKey) {
     prefer: 'return=minimal'
   });
 
-  clearActiveKeysCache();
+  clearActiveKeysCache(provider);
 }
 
-export async function pgDisableApiKey(env, apiKey, duration = 3600) {
+export async function pgDisableApiKey(env, apiKey, duration = 3600, provider = 'ollama') {
   const disabledUntil = duration > 0
     ? new Date(Date.now() + duration * 1000).toISOString()
     : null;
 
+  const tables = getTables(provider);
   await pgRequest(env, {
     method: 'PATCH',
-    table: 'ollama_api_keys',
+    table: tables.keys,
     query: {
       api_key: `eq.${apiKey}`
     },
@@ -496,13 +530,14 @@ export async function pgDisableApiKey(env, apiKey, duration = 3600) {
     prefer: 'return=minimal'
   });
 
-  clearActiveKeysCache();
+  clearActiveKeysCache(provider);
 }
 
-export async function pgGetGlobalStats(env) {
+export async function pgGetGlobalStats(env, provider = 'ollama') {
   try {
+    const tables = getTables(provider);
     const row = await pgRequest(env, {
-      table: 'ollama_api_global_stats',
+      table: tables.globalStats,
       query: {
         select: 'id,total_requests,success_count,failure_count,updated_at',
         id: 'eq.global'
@@ -531,10 +566,11 @@ export async function pgGetGlobalStats(env) {
   }
 }
 
-export async function pgIncrementGlobalStats(env, { isSuccess }) {
+export async function pgIncrementGlobalStats(env, { isSuccess }, provider = 'ollama') {
   try {
+    const tables = getTables(provider);
     const existing = await pgRequest(env, {
-      table: 'ollama_api_global_stats',
+      table: tables.globalStats,
       query: {
         select: 'id,total_requests,success_count,failure_count',
         id: 'eq.global'
@@ -550,7 +586,7 @@ export async function pgIncrementGlobalStats(env, { isSuccess }) {
     if (!existing) {
       await pgRequest(env, {
         method: 'POST',
-        table: 'ollama_api_global_stats',
+        table: tables.globalStats,
         body: [{
           id: 'global',
           total_requests: totalRequests,
@@ -563,7 +599,7 @@ export async function pgIncrementGlobalStats(env, { isSuccess }) {
     } else {
       await pgRequest(env, {
         method: 'PATCH',
-        table: 'ollama_api_global_stats',
+        table: tables.globalStats,
         query: {
           id: 'eq.global'
         },
@@ -578,7 +614,7 @@ export async function pgIncrementGlobalStats(env, { isSuccess }) {
     }
 
     const verify = await pgRequest(env, {
-      table: 'ollama_api_global_stats',
+      table: tables.globalStats,
       query: {
         select: 'id',
         id: 'eq.global'
@@ -593,9 +629,10 @@ export async function pgIncrementGlobalStats(env, { isSuccess }) {
   }
 }
 
-async function pgGetKeyStatsRow(env, apiKey) {
+async function pgGetKeyStatsRow(env, apiKey, provider = 'ollama') {
+  const tables = getTables(provider);
   return await pgRequest(env, {
-    table: 'ollama_api_key_stats',
+    table: tables.keyStats,
     query: {
       select: 'api_key,total_requests,success_count,failure_count,last_used,last_success,last_failure,success_rate,consecutive_failures,created_at',
       api_key: `eq.${apiKey}`
@@ -604,8 +641,9 @@ async function pgGetKeyStatsRow(env, apiKey) {
   });
 }
 
-export async function pgRecordKeyStats(env, apiKey, { isSuccess }) {
-  const existing = await pgGetKeyStatsRow(env, apiKey);
+export async function pgRecordKeyStats(env, apiKey, { isSuccess }, provider = 'ollama') {
+  const tables = getTables(provider);
+  const existing = await pgGetKeyStatsRow(env, apiKey, provider);
   const now = new Date().toISOString();
 
   if (!existing) {
@@ -624,7 +662,7 @@ export async function pgRecordKeyStats(env, apiKey, { isSuccess }) {
 
     await pgRequest(env, {
       method: 'POST',
-      table: 'ollama_api_key_stats',
+      table: tables.keyStats,
       body,
       prefer: 'resolution=ignore-duplicates,return=minimal'
     });
@@ -650,7 +688,7 @@ export async function pgRecordKeyStats(env, apiKey, { isSuccess }) {
 
   await pgRequest(env, {
     method: 'PATCH',
-    table: 'ollama_api_key_stats',
+    table: tables.keyStats,
     query: {
       api_key: `eq.${apiKey}`
     },
@@ -659,8 +697,9 @@ export async function pgRecordKeyStats(env, apiKey, { isSuccess }) {
   });
 }
 
-export async function pgGetKeyStats(env, apiKey) {
-  const row = await pgGetKey(env, apiKey);
+export async function pgGetKeyStats(env, apiKey, provider = 'ollama') {
+  const tables = getTables(provider);
+  const row = await pgGetKey(env, apiKey, provider);
   if (!row) {
     return {
       apiKey: apiKey.substring(0, 20) + '...',
@@ -674,7 +713,7 @@ export async function pgGetKeyStats(env, apiKey) {
     };
   }
 
-  const stats = await pgGetKeyStatsRow(env, apiKey);
+  const stats = await pgGetKeyStatsRow(env, apiKey, provider);
 
   const status = normalizeKeyStatus(row);
 
@@ -704,10 +743,11 @@ export async function pgGetKeyStats(env, apiKey) {
   };
 }
 
-export async function pgListKeyStats(env) {
-  const keys = await pgListApiKeysRaw(env);
+export async function pgListKeyStats(env, provider = 'ollama') {
+  const tables = getTables(provider);
+  const keys = await pgListApiKeysRaw(env, provider);
   const statsRows = await pgRequest(env, {
-    table: 'ollama_api_key_stats',
+    table: tables.keyStats,
     query: {
       select: 'api_key,total_requests,success_count,failure_count,last_used,success_rate'
     }
@@ -731,7 +771,8 @@ export async function pgListKeyStats(env) {
   });
 }
 
-export async function pgCreateClientToken(env, tokenData) {
+export async function pgCreateClientToken(env, tokenData, provider = 'ollama') {
+  const tables = getTables(provider);
   const body = [{
     token: tokenData.token,
     name: tokenData.name,
@@ -742,15 +783,16 @@ export async function pgCreateClientToken(env, tokenData) {
 
   await pgRequest(env, {
     method: 'POST',
-    table: 'ollama_api_client_tokens',
+    table: tables.clientTokens,
     body,
     prefer: 'resolution=ignore-duplicates,return=minimal'
   });
 }
 
-export async function pgGetClientToken(env, token) {
+export async function pgGetClientToken(env, token, provider = 'ollama') {
+  const tables = getTables(provider);
   return await pgRequest(env, {
-    table: 'ollama_api_client_tokens',
+    table: tables.clientTokens,
     query: {
       select: 'token,name,created_at,expires_at,request_count',
       token: `eq.${token}`
@@ -759,13 +801,14 @@ export async function pgGetClientToken(env, token) {
   });
 }
 
-export async function pgIncrementClientTokenUsage(env, token) {
-  const row = await pgGetClientToken(env, token);
+export async function pgIncrementClientTokenUsage(env, token, provider = 'ollama') {
+  const tables = getTables(provider);
+  const row = await pgGetClientToken(env, token, provider);
   if (!row) return;
 
   await pgRequest(env, {
     method: 'PATCH',
-    table: 'ollama_api_client_tokens',
+    table: tables.clientTokens,
     query: {
       token: `eq.${token}`
     },
@@ -776,9 +819,10 @@ export async function pgIncrementClientTokenUsage(env, token) {
   });
 }
 
-export async function pgListClientTokens(env) {
+export async function pgListClientTokens(env, provider = 'ollama') {
+  const tables = getTables(provider);
   const rows = await pgRequest(env, {
-    table: 'ollama_api_client_tokens',
+    table: tables.clientTokens,
     query: {
       select: 'token,name,created_at,expires_at,request_count'
     }
@@ -797,10 +841,11 @@ export async function pgListClientTokens(env) {
   }));
 }
 
-export async function pgDeleteClientToken(env, token) {
+export async function pgDeleteClientToken(env, token, provider = 'ollama') {
+  const tables = getTables(provider);
   await pgRequest(env, {
     method: 'DELETE',
-    table: 'ollama_api_client_tokens',
+    table: tables.clientTokens,
     query: {
       token: `eq.${token}`
     },
@@ -808,9 +853,10 @@ export async function pgDeleteClientToken(env, token) {
   });
 }
 
-export async function pgUpsertModelStats(env, modelName, { isSuccess, timestamp }) {
+export async function pgUpsertModelStats(env, modelName, { isSuccess, timestamp }, provider = 'ollama') {
+  const tables = getTables(provider);
   const existing = await pgRequest(env, {
-    table: 'ollama_api_model_stats',
+    table: tables.modelStats,
     query: {
       select: 'model,total_requests,success_count,failure_count,first_used',
       model: `eq.${modelName}`
@@ -832,7 +878,7 @@ export async function pgUpsertModelStats(env, modelName, { isSuccess, timestamp 
 
     await pgRequest(env, {
       method: 'POST',
-      table: 'ollama_api_model_stats',
+      table: tables.modelStats,
       body,
       prefer: 'resolution=ignore-duplicates,return=minimal'
     });
@@ -852,16 +898,17 @@ export async function pgUpsertModelStats(env, modelName, { isSuccess, timestamp 
 
   await pgRequest(env, {
     method: 'PATCH',
-    table: 'ollama_api_model_stats',
+    table: tables.modelStats,
     query: { model: `eq.${modelName}` },
     body: updated,
     prefer: 'return=minimal'
   });
 }
 
-export async function pgUpsertModelHourly(env, modelName, hour, { isSuccess }) {
+export async function pgUpsertModelHourly(env, modelName, hour, { isSuccess }, provider = 'ollama') {
+  const tables = getTables(provider);
   const existing = await pgRequest(env, {
-    table: 'ollama_api_model_hourly',
+    table: tables.modelHourly,
     query: {
       select: 'model,hour,requests,success,failure',
       model: `eq.${modelName}`,
@@ -881,7 +928,7 @@ export async function pgUpsertModelHourly(env, modelName, hour, { isSuccess }) {
 
     await pgRequest(env, {
       method: 'POST',
-      table: 'ollama_api_model_hourly',
+      table: tables.modelHourly,
       body,
       prefer: 'resolution=ignore-duplicates,return=minimal'
     });
@@ -896,7 +943,7 @@ export async function pgUpsertModelHourly(env, modelName, hour, { isSuccess }) {
 
   await pgRequest(env, {
     method: 'PATCH',
-    table: 'ollama_api_model_hourly',
+    table: tables.modelHourly,
     query: {
       model: `eq.${modelName}`,
       hour: `eq.${hour}`
@@ -906,9 +953,10 @@ export async function pgUpsertModelHourly(env, modelName, hour, { isSuccess }) {
   });
 }
 
-export async function pgListModelStats(env, limit = 10) {
+export async function pgListModelStats(env, limit = 10, provider = 'ollama') {
+  const tables = getTables(provider);
   const rows = await pgRequest(env, {
-    table: 'ollama_api_model_stats',
+    table: tables.modelStats,
     query: {
       select: 'model,total_requests,success_count,failure_count,last_used',
       order: 'total_requests.desc',
@@ -919,13 +967,14 @@ export async function pgListModelStats(env, limit = 10) {
   return Array.isArray(rows) ? rows : [];
 }
 
-export async function pgGetModelHourlyAggregated(env, { hours = 24 } = {}) {
+export async function pgGetModelHourlyAggregated(env, { hours = 24 } = {}, provider = 'ollama') {
   const now = Date.now();
   const start = new Date(now - (hours - 1) * 3600000);
   const startHour = start.toISOString().slice(0, 13);
 
+  const tables = getTables(provider);
   const rows = await pgRequest(env, {
-    table: 'ollama_api_model_hourly',
+    table: tables.modelHourly,
     query: {
       select: 'hour,sum_requests:sum(requests),sum_success:sum(success),sum_failure:sum(failure)',
       and: `(gte.hour.${startHour})`,
@@ -937,13 +986,14 @@ export async function pgGetModelHourlyAggregated(env, { hours = 24 } = {}) {
   return Array.isArray(rows) ? rows : [];
 }
 
-export async function pgGetRecentTopModels(env, { hours = 1, limit = 3 } = {}) {
+export async function pgGetRecentTopModels(env, { hours = 1, limit = 3 } = {}, provider = 'ollama') {
   const now = Date.now();
   const start = new Date(now - (hours - 1) * 3600000);
   const startHour = start.toISOString().slice(0, 13);
 
+  const tables = getTables(provider);
   const rows = await pgRequest(env, {
-    table: 'ollama_api_model_hourly',
+    table: tables.modelHourly,
     query: {
       select: 'model,sum_requests:sum(requests),sum_success:sum(success),sum_failure:sum(failure)',
       and: `(gte.hour.${startHour})`,
@@ -956,7 +1006,7 @@ export async function pgGetRecentTopModels(env, { hours = 1, limit = 3 } = {}) {
   return Array.isArray(rows) ? rows : [];
 }
 
-async function prepareSupabaseImport(env, entries) {
+async function prepareSupabaseImport(env, entries, provider = 'ollama') {
   const normalized = [];
   for (const entry of entries) {
     if (!entry || !entry.apiKey) continue;
@@ -977,8 +1027,9 @@ async function prepareSupabaseImport(env, entries) {
     };
   }
 
+  const tables = getTables(provider);
   const existingRows = await pgRequest(env, {
-    table: 'ollama_api_keys',
+    table: tables.keys,
     query: {
       select: 'api_key'
     }
@@ -1005,9 +1056,10 @@ async function prepareSupabaseImport(env, entries) {
   };
 }
 
-async function countInsertedRows(env, beforeCount) {
+async function countInsertedRows(env, beforeCount, provider = 'ollama') {
+  const tables = getTables(provider);
   const afterRows = await pgRequest(env, {
-    table: 'ollama_api_keys',
+    table: tables.keys,
     query: {
       select: 'api_key'
     }
