@@ -444,7 +444,70 @@ async function testChatWithTemplate() {
 }
 
 /**
- * 测试 6: 错误处理 - 无效的 Token
+ * 测试 6: 获取公开统计数据
+ */
+async function testPublicStats() {
+  const response = await fetch(`${API_BASE_URL}/admin/public-stats`, {
+    method: 'GET',
+    headers: {
+      'Accept': '*/*',
+      'Cache-Control': 'no-store'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: 无法获取公开统计数据`);
+  }
+
+  const data = await response.json();
+
+  // 验证响应结构 - global 字段
+  if (!data.global || typeof data.global !== 'object') {
+    throw new Error('响应格式错误：缺少 global 字段');
+  }
+
+  const requiredGlobalFields = ['totalRequests', 'successCount', 'failureCount', 'successRate', 'totalApiKeys', 'activeKeys', 'failedKeys', 'storage'];
+  for (const field of requiredGlobalFields) {
+    if (!(field in data.global)) {
+      throw new Error(`响应格式错误：global 缺少 ${field} 字段`);
+    }
+  }
+
+  // 验证响应结构 - topModels 字段
+  if (!data.topModels || !Array.isArray(data.topModels)) {
+    throw new Error('响应格式错误：缺少 topModels 数组');
+  }
+
+  // 验证响应结构 - recentTopModels 字段
+  if (!data.recentTopModels || !Array.isArray(data.recentTopModels)) {
+    throw new Error('响应格式错误：缺少 recentTopModels 数组');
+  }
+
+  // 验证响应结构 - hourlyTrend 字段
+  if (!data.hourlyTrend || !Array.isArray(data.hourlyTrend)) {
+    throw new Error('响应格式错误：缺少 hourlyTrend 数组');
+  }
+
+  // 验证 hourlyTrend 应该有 24 小时数据
+  if (data.hourlyTrend.length !== 24) {
+    throw new Error(`hourlyTrend 应该有 24 小时数据，实际为 ${data.hourlyTrend.length}`);
+  }
+
+  // 输出关键统计信息
+  log(`  └─ 总请求数: ${data.global.totalRequests}`, 'info');
+  log(`  └─ 成功率: ${data.global.successRate}%`, 'info');
+  log(`  └─ 总 API Keys: ${data.global.totalApiKeys}`, 'info');
+  log(`  └─ 活跃 Keys: ${data.global.activeKeys}`, 'info');
+  log(`  └─ 存储方式: ${data.global.storage}`, 'info');
+  log(`  └─ 热门模型数: ${data.topModels.length}`, 'info');
+  if (data.topModels.length > 0) {
+    const topModel = data.topModels[0];
+    log(`  └─ 最热模型: ${topModel.model} (${topModel.requests} 次请求, ${topModel.successRate}% 成功率)`, 'info');
+  }
+}
+
+/**
+ * 测试 7: 错误处理 - 无效的 Token
  */
 async function testInvalidToken() {
   const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
@@ -555,6 +618,7 @@ async function main() {
   // 执行测试
   await runTest('获取模型列表', testGetModels);
   await runTest('获取测试模板', testGetTemplates);
+  await runTest('获取公开统计数据', testPublicStats);
   await runTest('Chat Completion (非流式)', testChatCompletion);
   await runTest('Chat Completion (流式)', testChatCompletionStream);
   await runTest('使用模板进行对话测试', testChatWithTemplate);

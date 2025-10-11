@@ -626,17 +626,45 @@ email----password----session----api_key
 
 ```text
 ollama-api-pool/
+├── .github/
+│   └── workflows/
+│       ├── api-test.yml       # Automated API testing workflow
+│       └── deploy.yml         # Automated deployment workflow
+├── scripts/
+│   ├── api-test.js            # API testing script
+│   └── README.md              # Testing script documentation
 ├── src/
-│   ├── index.js       # Main entry point
-│   ├── proxy.js       # API proxy
-│   ├── auth.js        # Authentication module
-│   ├── admin.js       # Admin API
-│   ├── keyManager.js  # Key management
-│   ├── dashboard.js   # Admin dashboard
-│   └── utils.js       # Utility functions
-├── wrangler.toml      # Cloudflare configuration
-├── package.json       # Dependencies
-└── README.md          # Documentation
+│   ├── html/
+│   │   ├── login.js           # Login page
+│   │   └── main-dashboard.js  # Main dashboard page
+│   ├── static/
+│   │   ├── api-docs-html.js   # API documentation HTML
+│   │   ├── dashboard-js.js    # Dashboard JavaScript
+│   │   ├── login-js.js        # Login JavaScript
+│   │   └── stats-html.js      # Statistics page HTML
+│   ├── admin.js               # Admin API
+│   ├── auth.js                # Authentication module
+│   ├── buildInfo.js           # Build information
+│   ├── cache.js               # Cache module
+│   ├── dashboard.js           # Admin dashboard
+│   ├── index.js               # Main entry point
+│   ├── keyManager.js          # Key management
+│   ├── postgres.js            # PostgreSQL integration
+│   ├── providers.js           # Provider configuration
+│   ├── proxy.js               # API proxy
+│   ├── redis.js               # Redis integration
+│   └── utils.js               # Utility functions
+├── .gitignore                 # Git ignore file
+├── CONFIGURATION.md           # Configuration guide
+├── CONTRIBUTING.md            # Contributing guide
+├── LICENSE                    # MIT License
+├── OPTIMIZATION.md            # Optimization guide
+├── package.json               # Dependencies configuration
+├── PROJECT_SUMMARY.md         # Project summary
+├── README.md                  # Chinese documentation
+├── README_EN.md               # English documentation
+├── wrangler.toml.example      # Cloudflare config template
+└── wrangler.toml              # Cloudflare configuration (local)
 ```
 
 </details>

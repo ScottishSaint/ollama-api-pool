@@ -637,17 +637,45 @@ email----password----session----api_key
 
 ```text
 ollama-api-pool/
+├── .github/
+│   └── workflows/
+│       ├── api-test.yml       # API 自动化测试工作流
+│       └── deploy.yml         # 自动部署工作流
+├── scripts/
+│   ├── api-test.js            # API 测试脚本
+│   └── README.md              # 测试脚本说明
 ├── src/
-│   ├── index.js       # 主入口
-│   ├── proxy.js       # API 代理
-│   ├── auth.js        # 鉴权模块
-│   ├── admin.js       # 管理 API
-│   ├── keyManager.js  # Key 管理
-│   ├── dashboard.js   # 管理后台
-│   └── utils.js       # 工具函数
-├── wrangler.toml      # Cloudflare 配置
-├── package.json       # 依赖配置
-└── README.md          # 说明文档
+│   ├── html/
+│   │   ├── login.js           # 登录页面
+│   │   └── main-dashboard.js  # 主控制台页面
+│   ├── static/
+│   │   ├── api-docs-html.js   # API 文档 HTML
+│   │   ├── dashboard-js.js    # 控制台 JS
+│   │   ├── login-js.js        # 登录 JS
+│   │   └── stats-html.js      # 统计页面 HTML
+│   ├── admin.js               # 管理 API
+│   ├── auth.js                # 鉴权模块
+│   ├── buildInfo.js           # 构建信息
+│   ├── cache.js               # 缓存模块
+│   ├── dashboard.js           # 管理后台
+│   ├── index.js               # 主入口
+│   ├── keyManager.js          # Key 管理
+│   ├── postgres.js            # PostgreSQL 集成
+│   ├── providers.js           # Provider 配置
+│   ├── proxy.js               # API 代理
+│   ├── redis.js               # Redis 集成
+│   └── utils.js               # 工具函数
+├── .gitignore                 # Git 忽略文件
+├── CONFIGURATION.md           # 配置指南
+├── CONTRIBUTING.md            # 贡献指南
+├── LICENSE                    # MIT 许可证
+├── OPTIMIZATION.md            # 优化措施
+├── package.json               # 依赖配置
+├── PROJECT_SUMMARY.md         # 项目概要
+├── README.md                  # 中文文档
+├── README_EN.md               # 英文文档
+├── wrangler.toml.example      # Cloudflare 配置模板
+└── wrangler.toml              # Cloudflare 配置（本地）
 ```
 
 </details>

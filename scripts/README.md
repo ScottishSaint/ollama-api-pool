@@ -33,8 +33,10 @@ API_BASE_URL=https://your-api.example.com API_TOKEN=your-token node scripts/api-
 |---------|------|---------|
 | 获取模型列表 | 测试 `GET /v1/models` 接口 | ❌ |
 | 获取测试模板 | 测试 `GET /api/test-templates` 接口 | ❌ |
+| 获取公开统计数据 | 测试 `GET /admin/public-stats` 接口，验证全局统计、热门模型、小时趋势等数据 | ❌ |
 | Chat Completion (非流式) | 测试非流式聊天完成 | ✅ |
 | Chat Completion (流式) | 测试流式聊天完成 | ✅ |
+| 使用模板进行对话测试 | 使用预定义模板测试聊天场景 | ✅ |
 | 错误处理 - 无效 Token | 测试错误处理机制 | ❌ |
 
 ## GitHub Actions
