@@ -113,6 +113,33 @@ jobs:
               .write();
             console.log('✓ 测试报告已添加到 GitHub Summary');
 
+      - name: 💬 发布测试报告（Commit 评论）
+        if: always() && github.event_name == 'workflow_run'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ORG_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            let report = '';
+            if (fs.existsSync('test-report.md')) {
+              report = fs.readFileSync('test-report.md', 'utf8');
+            } else {
+              report = `## ❌ API 接口测试失败\n\n测试脚本执行失败，未生成测试报告。请检查日志。`;
+            }
+
+            // 获取触发工作流的 commit SHA
+            const commitSha = context.payload.workflow_run.head_sha;
+
+            // 发布 commit 评论
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: commitSha,
+              body: report
+            });
+            console.log('✓ 测试报告已发布到 commit 评论');
+
       - name: 📤 上传测试报告
         if: always()
         uses: actions/upload-artifact@v4
