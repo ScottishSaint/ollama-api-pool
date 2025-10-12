@@ -1,6 +1,6 @@
 {
   "name": "ollama-api-pool",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "🚀 基于 Cloudflare Workers 的 Ollama API 代理池 - 支持多账号轮询、自动故障转移、负载均衡和统一鉴权。高可用、边缘计算、OpenAI 兼容的 AI 模型 API 网关。",
   "main": "src/index.js",
   "type": "module",

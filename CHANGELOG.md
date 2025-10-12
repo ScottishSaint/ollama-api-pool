@@ -1,5 +1,26 @@
 # Changelog
 
+## [3.0.0] - 2025-10-12
+
+### Added
+- **用户认证体系**：新增邮箱注册、验证码登录和密码登录功能，支持用户自助申请 API 访问凭证。（参见 [6ea60a4](https://github.com/dext7r/ollama-api-pool/commit/6ea60a4)）
+- **用户仪表盘**：新增独立用户控制台 (`/user`)，支持个人信息查看、每日签到续期、签到历史查询。（参见 [6ea60a4](https://github.com/dext7r/ollama-api-pool/commit/6ea60a4)）
+- **邮件验证系统**：集成 push-all-in-one 邮件推送服务，提供精美的 HTML 验证码邮件模板。（参见 [6ea60a4](https://github.com/dext7r/ollama-api-pool/commit/6ea60a4)）
+- **项目推荐卡片**：首页和登录页添加相关项目推荐（HiveChat AI、HTML2Web、Plan University Email Server、Plan University 公益站），所有外链包含 `?source=` 参数追踪来源。（参见 [0e3dd6a](https://github.com/dext7r/ollama-api-pool/commit/0e3dd6a)）
+- **系统公告板块**：首页新增系统公告展示区，支持功能更新和性能优化公告。（参见 [0e3dd6a](https://github.com/dext7r/ollama-api-pool/commit/0e3dd6a)）
+- **实时统计增强**：新增"今日请求"和"成功率"实时统计卡片，提升数据可见性。（参见 [0e3dd6a](https://github.com/dext7r/ollama-api-pool/commit/0e3dd6a)）
+- **管理员用户管理**：新增用户管理面板，支持批量启用/禁用、延长凭证有效期、重置密钥、查看签到记录等操作。（参见 [6ea60a4](https://github.com/dext7r/ollama-api-pool/commit/6ea60a4)）
+
+### Changed
+- **登录页面重构**：优化登录表单布局，改进服务提供方选择器和"记住我"复选框的视觉协调性，提供验证码/密码双模式登录切换。（参见 [0e3dd6a](https://github.com/dext7r/ollama-api-pool/commit/0e3dd6a)）
+- **Turnstile 集成**：在注册、登录、发送验证码等敏感操作中集成 Cloudflare Turnstile 人机验证，增强安全防护。（参见 [6ea60a4](https://github.com/dext7r/ollama-api-pool/commit/6ea60a4)）
+- **数据库扩展**：PostgreSQL 新增用户表 (`users`)、邮箱验证码表 (`email_verification_codes`)、签到记录表 (`user_signins`)，完善用户体系存储。（参见 [6ea60a4](https://github.com/dext7r/ollama-api-pool/commit/6ea60a4)）
+- **邮件模板优化**：修正验证邮件中的项目链接地址为正确域名 `https://ollama-api-pool.h7ml.workers.dev`，添加相关服务推荐板块。（参见 [0e3dd6a](https://github.com/dext7r/ollama-api-pool/commit/0e3dd6a)）
+
+### Fixed
+- **注册验证码问题**：修复注册表单点击"获取验证码"时错误提示"该邮箱未注册，无法发送登录验证码"的 bug，改为动态识别 `purpose` 参数（`login` vs `register`）。（参见 [0e3dd6a](https://github.com/dext7r/ollama-api-pool/commit/0e3dd6a)）
+- **错误提示优化**：当用户在登录表单误填未注册邮箱时，增加友好提示引导切换到"快速注册"标签。（参见 [0e3dd6a](https://github.com/dext7r/ollama-api-pool/commit/0e3dd6a)）
+
 ## [2.0.0] - 2025-10-12
 
 ### Added
