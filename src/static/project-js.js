@@ -28,6 +28,28 @@ function buildLine(icon, content) {
     return '<div class="meta-line"><span class="meta-icon">' + icon + '</span><span>' + content + '</span></div>';
 }
 
+function escapeReleaseSummary(text) {
+    if (!text) return '';
+    var result = '';
+    for (var i = 0; i < text.length; i++) {
+        var ch = text[i];
+        if (ch === '&') {
+            result += '&amp;';
+        } else if (ch === '<') {
+            result += '&lt;';
+        } else if (ch === '>') {
+            result += '&gt;';
+        } else if (ch === '\r') {
+            continue;
+        } else if (ch === '\n') {
+            result += '<br>';
+        } else {
+            result += ch;
+        }
+    }
+    return result;
+}
+
 function renderMeta(info, tags, fetchedAt) {
   var versionCard = document.getElementById('repo-version');
   var updatedCard = document.getElementById('repo-updated');
@@ -123,7 +145,7 @@ function renderReleases(releases, fetchedAt) {
 
     var summaryHtml = '';
     if (item.summary) {
-      summaryHtml = '<p class="release-summary">' + item.summary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>') + '</p>';
+      summaryHtml = '<p class="release-summary">' + escapeReleaseSummary(item.summary) + '</p>';
     }
 
     listHtml += '<article class="release-item">';
