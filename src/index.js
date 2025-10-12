@@ -336,7 +336,9 @@ async function handleModels(request, env, provider = 'ollama') {
       return errorResponse('No available API keys', 503);
     }
 
-    const headers = buildUpstreamHeaders(normalized, apiKey, env);
+    const headers = buildUpstreamHeaders(normalized, apiKey, env, {
+      'User-Agent': getRandomUserAgent()
+    });
     delete headers['Content-Type'];
 
     const response = await fetch(providerConfig.upstream.models, {

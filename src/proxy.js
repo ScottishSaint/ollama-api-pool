@@ -7,7 +7,7 @@
 
 import { getNextApiKey, markApiKeyFailed } from './keyManager';
 import { verifyClientToken } from './auth';
-import { errorResponse, jsonResponse, corsHeaders, isKvStorageEnabled } from './utils';
+import { errorResponse, jsonResponse, corsHeaders, isKvStorageEnabled, getRandomUserAgent } from './utils';
 import { getCachedResponse, setCachedResponse } from './cache';
 import { isRedisEnabled, redisIncr, redisExpire, redisGet, redisSet } from './redis';
 import { isPostgresEnabled, pgRecordKeyStats, pgIncrementGlobalStats, pgUpsertModelStats, pgUpsertModelHourly } from './postgres';
@@ -104,9 +104,9 @@ export async function handleProxyRequest(request, env, provider = 'ollama') {
       }
 
       try {
-        // 转发请求到 Ollama API，传递原始 User-Agent
+        // 转发请求到上游 API，传递原始 User-Agent（若无则使用随机 UA）
         const upstreamHeaders = buildUpstreamHeaders(normalizedProvider, apiKey, env, {
-          'User-Agent': userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          'User-Agent': userAgent || getRandomUserAgent()
         });
 
         const response = await fetch(providerConfig.upstream.chatCompletions, {
