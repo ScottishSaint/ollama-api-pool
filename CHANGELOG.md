@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.1.0] - 2025-10-12
+
+### Added
+- **Provider 独立控制**：新增 `DISABLE_OLLAMA` 和 `DISABLE_OPENROUTER` 环境变量，支持独立启用/禁用每个 Provider，灵活配置服务范围（仅 Ollama、仅 OpenRouter 或同时使用）。（参见 [8eefa44](https://github.com/dext7r/ollama-api-pool/commit/8eefa44)）
+- **防封禁机制**：实现客户端请求头透传（12+ headers），包括 User-Agent、Referer、Accept-Language、Sec-CH-UA 等浏览器指纹信息，避免被上游服务识别为代理流量。（参见 [d82e7ee](https://github.com/dext7r/ollama-api-pool/commit/d82e7ee)、[2c89ad3](https://github.com/dext7r/ollama-api-pool/commit/2c89ad3)、[0913c24](https://github.com/dext7r/ollama-api-pool/commit/0913c24)）
+- **随机 User-Agent 池**：添加 7 种不同浏览器 UA 随机轮换，用于所有上游 API 请求（包括 GitHub API、Ollama、OpenRouter），进一步降低检测风险。（参见 [8872077](https://github.com/dext7r/ollama-api-pool/commit/8872077)、[99b2b1b](https://github.com/dext7r/ollama-api-pool/commit/99b2b1b)）
+- **项目文档增强**：项目页面支持切换查看多个 Markdown 文档（README、API_PARAMETERS、CONFIGURATION、PROVIDER_TOGGLE 等），文档实时同步 GitHub 仓库并缓存 10 分钟。（参见 [e383bcf](https://github.com/dext7r/ollama-api-pool/commit/e383bcf)）
+- **API 参数文档**：新增 `API_PARAMETERS.md` 详细说明所有 OpenAI 兼容参数、透传机制和防封禁策略。（参见 [2c89ad3](https://github.com/dext7r/ollama-api-pool/commit/2c89ad3)）
+- **Provider 控制文档**：新增 `PROVIDER_TOGGLE.md` 完整指南，包含 4 种使用场景、环境变量配置、健康检查说明和常见问题解答。（参见 [8eefa44](https://github.com/dext7r/ollama-api-pool/commit/8eefa44)）
+
+### Changed
+- **健康检查增强**：`/health` 接口新增 `providers` 字段，显示每个 Provider 的启用状态和配置情况。（参见 [8eefa44](https://github.com/dext7r/ollama-api-pool/commit/8eefa44)）
+- **请求头兼容性**：支持非标准 `HTTP-Referer` 头（如 Cherry Studio 客户端），自动转换为标准 `Referer` 头转发至上游。（参见 [0913c24](https://github.com/dext7r/ollama-api-pool/commit/0913c24)）
+- **GitHub Actions 优化**：API 测试失败改为非阻塞警告，不影响部署流程。（参见 [2c89ad3](https://github.com/dext7r/ollama-api-pool/commit/2c89ad3)）
+- **文档全面更新**：README、README_EN、CONFIGURATION、PROJECT_SUMMARY 全面更新，添加 Provider 控制和防封禁机制说明。（参见 [b6950b2](https://github.com/dext7r/ollama-api-pool/commit/b6950b2)）
+
+### Fixed
+- **User-Agent 缺失**：修复上游 API 请求未转发客户端 User-Agent 导致账号频繁被封的问题。（参见 [d82e7ee](https://github.com/dext7r/ollama-api-pool/commit/d82e7ee)）
+- **请求头遗漏**：补全 Accept、X-Title 等关键请求头的透传。（参见 [0913c24](https://github.com/dext7r/ollama-api-pool/commit/0913c24)）
+
 ## [3.0.0] - 2025-10-12
 
 ### Added
