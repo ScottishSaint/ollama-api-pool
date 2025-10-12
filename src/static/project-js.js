@@ -39,12 +39,15 @@ function escapeReleaseSummary(text) {
             result += '&lt;';
         } else if (ch === '>') {
             result += '&gt;';
-        } else if (ch === '\r') {
-            continue;
-        } else if (ch === '\n') {
-            result += '<br>';
         } else {
-            result += ch;
+            var code = ch.charCodeAt(0);
+            if (code === 13) {
+                continue;
+            } else if (code === 10) {
+                result += '<br>';
+            } else {
+                result += ch;
+            }
         }
     }
     return result;
