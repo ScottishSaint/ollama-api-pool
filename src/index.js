@@ -13,7 +13,7 @@ import { handleProxyRequest } from './proxy';
 import { handleAuth } from './auth';
 import { handleAdmin } from './admin';
 import { handleDashboard, handleUserDashboard } from './dashboard';
-import { corsHeaders, jsonResponse, errorResponse, getRandomUserAgent } from './utils';
+import { corsHeaders, jsonResponse, errorResponse, getRandomUserAgent, isProviderEnabled } from './utils';
 import { getCachedModels, setCachedModels } from './cache';
 import { countApiKeys, getNextApiKey } from './keyManager';
 import { verifyClientToken } from './auth';
@@ -106,20 +106,36 @@ export default {
         // 管理 API
         return handleAdmin(request, env);
       } else if (path === '/v1/chat/completions') {
+        // 检查 Ollama 是否启用
+        if (!isProviderEnabled(env, 'ollama')) {
+          return errorResponse('Ollama service is currently disabled by administrator', 503);
+        }
         const hasKeys = await checkHasApiKeys(env, 'ollama');
         if (!hasKeys) {
           return errorResponse('No API keys configured. Please add keys via admin dashboard', 503);
         }
         return handleProxyRequest(request, env, 'ollama');
       } else if (path === '/openrouter/v1/chat/completions') {
+        // 检查 OpenRouter 是否启用
+        if (!isProviderEnabled(env, 'openrouter')) {
+          return errorResponse('OpenRouter service is currently disabled by administrator', 503);
+        }
         const hasKeys = await checkHasApiKeys(env, 'openrouter');
         if (!hasKeys) {
           return errorResponse('No OpenRouter API keys configured. Please add keys via admin dashboard', 503);
         }
         return handleProxyRequest(request, env, 'openrouter');
       } else if (path === '/v1/models') {
+        // 检查 Ollama 是否启用
+        if (!isProviderEnabled(env, 'ollama')) {
+          return errorResponse('Ollama service is currently disabled by administrator', 503);
+        }
         return handleModels(request, env, 'ollama');
       } else if (path === '/openrouter/v1/models') {
+        // 检查 OpenRouter 是否启用
+        if (!isProviderEnabled(env, 'openrouter')) {
+          return errorResponse('OpenRouter service is currently disabled by administrator', 503);
+        }
         return handleModels(request, env, 'openrouter');
       } else if (path === '/health') {
         // 健康检查
@@ -130,6 +146,16 @@ export default {
           service: 'Ollama API Pool',
           version: '1.0.0',
           configured: hasKeys,
+          providers: {
+            ollama: {
+              enabled: isProviderEnabled(env, 'ollama'),
+              configured: hasKeys
+            },
+            openrouter: {
+              enabled: isProviderEnabled(env, 'openrouter'),
+              configured: await checkHasApiKeys(env, 'openrouter')
+            }
+          },
           project: {
             name: 'Ollama API Pool',
             description: 'Intelligent Ollama API proxy pool with load balancing and fault tolerance',

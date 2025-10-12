@@ -60,3 +60,14 @@ export function getRandomUserAgent() {
   ];
   return userAgents[Math.floor(Math.random() * userAgents.length)];
 }
+
+// 检查 Provider 是否启用
+export function isProviderEnabled(env, provider) {
+  if (provider === 'ollama') {
+    return env.DISABLE_OLLAMA !== 'true';
+  }
+  if (provider === 'openrouter') {
+    return env.DISABLE_OPENROUTER !== 'true';
+  }
+  return true;
+}
