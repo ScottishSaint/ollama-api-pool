@@ -23,7 +23,94 @@ openssl rand -hex 32
 
 ---
 
-### 2. 统计分析开关
+### 2. 用户系统配置 <sup>v3.0.0+</sup>
+
+#### 2.1 JWT 签名密钥（必须配置）
+
+```toml
+AUTH_SECRET = "your-jwt-secret-key-here"
+```
+
+**说明**：
+- 用于 JWT Token 签名和验证
+- 必须是 32 位以上的随机字符串
+- 用户登录和会话管理依赖此密钥
+
+**安全建议**：
+```bash
+# 生成随机密钥
+openssl rand -base64 48
+```
+
+#### 2.2 Turnstile 人机验证（推荐配置）
+
+```toml
+ENABLE_TURNSTILE = "true"
+TURNSTILE_SITE_KEY = "your-turnstile-site-key"
+TURNSTILE_SECRET_KEY = "your-turnstile-secret-key"
+```
+
+**说明**：
+- `ENABLE_TURNSTILE`：是否启用 Turnstile 验证（推荐 `true`）
+- `TURNSTILE_SITE_KEY`：前端使用的 Site Key
+- `TURNSTILE_SECRET_KEY`：后端验证使用的 Secret Key
+
+**获取密钥**：
+1. 访问 [Cloudflare Dashboard](https://dash.cloudflare.com/?to=/:account/turnstile)
+2. 创建新的 Turnstile 站点
+3. 选择 "Managed" 模式（推荐）
+4. 复制 Site Key 和 Secret Key
+
+**作用范围**：
+- 用户注册
+- 用户登录（验证码/密码模式）
+- 发送验证码邮件
+
+**禁用方法**：
+```toml
+ENABLE_TURNSTILE = "false"  # 关闭 Turnstile 验证
+```
+
+#### 2.3 邮件服务配置（必须配置）
+
+```toml
+EMAIL_FORWARD_URL = "your-push-all-in-one-url"
+EMAIL_HOST = "smtp.example.com"
+EMAIL_PORT = "587"
+EMAIL_AUTH_USER = "your-email@example.com"
+EMAIL_AUTH_PASS = "your-email-password"
+EMAIL_SECURE = "true"
+```
+
+**说明**：
+- `EMAIL_FORWARD_URL`：邮件转发服务地址（推荐使用 push-all-in-one）
+- `EMAIL_HOST`：SMTP 服务器地址
+- `EMAIL_PORT`：SMTP 端口（通常为 587 或 465）
+- `EMAIL_AUTH_USER`：SMTP 认证用户名（通常是邮箱地址）
+- `EMAIL_AUTH_PASS`：SMTP 认证密码
+- `EMAIL_SECURE`：是否使用 TLS/SSL（`true` 推荐）
+
+**推荐方案**：
+1. **push-all-in-one**（推荐）
+   - GitHub: https://github.com/sinlatansen/push-all-in-one
+   - 支持多种邮件服务商
+   - 提供统一的 HTTP 接口
+
+2. **常见 SMTP 服务商**：
+   - **Gmail**: smtp.gmail.com:587
+   - **Outlook**: smtp-mail.outlook.com:587
+   - **QQ Mail**: smtp.qq.com:587
+   - **163 Mail**: smtp.163.com:465
+
+**验证码邮件特性**：
+- 精美的 HTML 邮件模板
+- 10 分钟有效期
+- 单次使用验证码
+- 频率限制（60 秒/次，10 次/天）
+
+---
+
+### 3. 统计分析开关
 
 ```toml
 ENABLE_ANALYTICS = "false"  # 推荐值：false

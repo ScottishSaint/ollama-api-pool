@@ -5,8 +5,8 @@
 - **项目名称**: Ollama API Pool
 - **仓库地址**: https://github.com/dext7r/ollama-api-pool
 - **许可证**: MIT License
-- **技术栈**: Cloudflare Workers, JavaScript
-- **版本**: 1.0.0
+- **技术栈**: Cloudflare Workers, JavaScript, PostgreSQL, Redis
+- **版本**: 3.0.0
 
 ## ✨ 核心功能
 
@@ -32,8 +32,19 @@
 - ✅ 统计面板
 - ✅ Key 管理
 - ✅ Token 管理
+- ✅ 用户管理 <sup>v3.0.0</sup>
 
-### 5. OpenAI 兼容
+### 5. 用户系统 <sup>v3.0.0</sup>
+- ✅ 邮箱注册/登录
+- ✅ 验证码登录
+- ✅ 密码登录
+- ✅ 邮件验证
+- ✅ Turnstile 人机验证
+- ✅ 用户仪表盘
+- ✅ 每日签到续期
+- ✅ 签到历史查询
+
+### 6. OpenAI 兼容
 - ✅ /v1/chat/completions
 - ✅ /v1/models
 - ✅ 流式/非流式支持
@@ -44,20 +55,45 @@
 ollama-api-pool/
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml          # 自动部署配置
+│       ├── deploy.yml          # 自动部署配置
+│       └── api-test.yml        # API 测试工作流
+├── database/
+│   ├── schema.sql              # PostgreSQL 数据库结构
+│   ├── README.md               # 数据库说明
+│   └── SQL_README.md           # SQL 脚本文档
+├── scripts/
+│   └── README.md               # 脚本说明
 ├── src/
+│   ├── html/
+│   │   ├── login.js            # 登录页面 HTML
+│   │   ├── main-dashboard.js   # 管理后台 HTML
+│   │   └── user-dashboard.js   # 用户仪表盘 HTML <sup>v3.0.0</sup>
+│   ├── static/
+│   │   ├── api-docs-html.js    # API 文档页面
+│   │   ├── dashboard-js.js     # 管理后台 JS
+│   │   ├── login-js.js         # 登录页面 JS
+│   │   └── user-dashboard-js.js # 用户仪表盘 JS <sup>v3.0.0</sup>
 │   ├── index.js                # 主入口
 │   ├── proxy.js                # API 代理 + 统计
-│   ├── auth.js                 # 鉴权模块
-│   ├── admin.js                # 管理 API + 验证导入
-│   ├── keyManager.js           # Key 管理 + 健康检查
-│   ├── dashboard.js            # 管理后台 UI
+│   ├── auth.js                 # 鉴权模块 + 用户认证 <sup>v3.0.0</sup>
+│   ├── admin.js                # 管理 API + 用户管理 <sup>v3.0.0</sup>
+│   ├── dashboard.js            # 管理后台路由
+│   ├── email.js                # 邮件服务 <sup>v3.0.0</sup>
+│   ├── postgres.js             # PostgreSQL 数据库操作
+│   ├── redis.js                # Redis 缓存操作
+│   ├── providers.js            # Provider 管理
+│   ├── buildInfo.js            # 构建信息
 │   └── utils.js                # 工具函数
 ├── .gitignore                  # Git 忽略规则
+├── CHANGELOG.md                # 变更日志
+├── CONFIGURATION.md            # 配置指南
 ├── CONTRIBUTING.md             # 贡献指南
+├── OPTIMIZATION.md             # 优化建议
+├── PROJECT_SUMMARY.md          # 项目摘要
 ├── LICENSE                     # MIT 许可证
 ├── package.json                # 项目配置
-├── README.md                   # 项目文档
+├── README.md                   # 项目文档（中文）
+├── README_EN.md                # 项目文档（英文）
 └── wrangler.toml               # Cloudflare 配置
 ```
 
@@ -83,10 +119,51 @@ ollama-api-pool/
 
 ### dashboard.js
 - Web 管理界面
-- 4个功能标签: API Keys / 客户端 Tokens / 批量导入 / 统计分析
-- 实时刷新 (30秒轮询)
+- 5个功能标签: API Keys / 客户端 Tokens / 用户管理 <sup>v3.0.0</sup> / 批量导入 / 统计分析
+- 实时刷新 (10秒轮询)
 
-## 📊 数据存储 (Cloudflare KV)
+### auth.js <sup>v3.0.0</sup>
+- JWT Token 签名和验证
+- 邮箱注册/登录
+- 验证码发送与验证
+- Turnstile 人机验证
+- 用户会话管理
+
+### email.js <sup>v3.0.0</sup>
+- push-all-in-one 集成
+- HTML 邮件模板
+- 验证码邮件发送
+- 频率限制（60s/次，10次/天）
+
+### postgres.js
+- 用户表 (users) <sup>v3.0.0</sup>
+- 邮箱验证码表 (email_verification_codes) <sup>v3.0.0</sup>
+- 签到记录表 (user_signins) <sup>v3.0.0</sup>
+- API Keys 表
+- 客户端 Tokens 表
+- 统计数据表
+
+## 📊 数据存储
+
+### PostgreSQL (主存储)
+- `users`: 用户信息表 <sup>v3.0.0</sup>
+- `email_verification_codes`: 邮箱验证码 <sup>v3.0.0</sup>
+- `user_signins`: 签到记录 <sup>v3.0.0</sup>
+- `ollama_api_keys`: Ollama API Keys
+- `openrouter_api_keys`: OpenRouter API Keys
+- `ollama_client_tokens`: Ollama 客户端 Tokens
+- `openrouter_client_tokens`: OpenRouter 客户端 Tokens
+- `ollama_stats`: Ollama 统计数据
+- `openrouter_stats`: OpenRouter 统计数据
+
+### Redis (缓存层)
+- 验证码缓存 <sup>v3.0.0</sup>
+- 验证码发送频率限制 <sup>v3.0.0</sup>
+- 每日发送次数限制 <sup>v3.0.0</sup>
+- 会话缓存
+- 统计数据缓存
+
+### Cloudflare KV (可选备用)
 
 ### Key 前缀规则
 - `api_keys_list`: 主 Key 列表
