@@ -70,6 +70,16 @@ English | [简体中文](./README.md)
 - 🔍 **Validated Import** - Line-by-line validation of API key validity with auto-categorization
 - 🎛️ **Admin Dashboard** - Web UI for managing API keys and client tokens
 
+### 👥 User System <sup>v3.0.0</sup>
+- 📧 **Email Registration** - Users can self-register with email to get dedicated API access credentials
+- 🔑 **Dual Login Modes** - Support both verification code and password login
+- ✉️ **Email Verification** - Integrated push-all-in-one email service with beautiful HTML verification code emails
+- 🎯 **User Dashboard** - Independent user console for viewing personal info, API keys, and usage stats
+- 📅 **Daily Check-in** - Users can extend API credential validity (+24 hours) by daily check-in
+- 📜 **Check-in History** - Complete check-in record query with pagination support
+- 🛡️ **Turnstile Verification** - Cloudflare Turnstile integration for bot protection
+- 👨‍💼 **User Management** - Admin can batch enable/disable users, extend credentials, reset keys
+
 ### ⚡ Performance & Storage
 - 🚀 **High Performance** - Built on Cloudflare Workers with global CDN acceleration
 - 🗄️ **Multi-tier Storage** - PostgreSQL + Redis + KV hybrid architecture support
@@ -128,10 +138,29 @@ binding = "ACCOUNTS"
 id = "your-accounts-kv-id"  # Replace with actual ID
 
 [vars]
+# Admin Configuration
 ADMIN_TOKEN = "your-secure-admin-token-here"  # Set a strong password
+
+# User System Configuration (v3.0.0+)
+AUTH_SECRET = "your-jwt-secret-key-here"  # JWT signing key, recommend 32+ random characters
+ENABLE_TURNSTILE = "true"  # Enable Turnstile bot protection
+TURNSTILE_SITE_KEY = "your-turnstile-site-key"  # Cloudflare Turnstile Site Key
+TURNSTILE_SECRET_KEY = "your-turnstile-secret-key"  # Cloudflare Turnstile Secret Key
+
+# Email Service Configuration (v3.0.0+)
+EMAIL_FORWARD_URL = "your-push-all-in-one-url"  # push-all-in-one email forwarding service URL
+EMAIL_HOST = "smtp.example.com"  # SMTP server address
+EMAIL_PORT = "587"  # SMTP port
+EMAIL_AUTH_USER = "your-email@example.com"  # SMTP username
+EMAIL_AUTH_PASS = "your-email-password"  # SMTP password
+EMAIL_SECURE = "true"  # Use TLS
 ```
 
 > ⚠️ **Important**: `wrangler.toml` contains sensitive information and is added to `.gitignore`
+>
+> 📧 **Email Service**: Recommend using [push-all-in-one](https://github.com/sinlatansen/push-all-in-one) for email forwarding
+>
+> 🛡️ **Turnstile**: Create a Turnstile site in [Cloudflare Dashboard](https://dash.cloudflare.com/?to=/:account/turnstile) to get the keys
 
 ### 4. Deploy
 

@@ -70,6 +70,16 @@
 - 🔍 **验证导入** - 逐行验证 API Key 有效性并自动分类
 - 🎛️ **管理后台** - Web 界面管理 API Keys 和客户端 Tokens
 
+### 👥 用户系统 <sup>v3.0.0</sup>
+- 📧 **邮箱注册** - 用户可通过邮箱自助注册账户，获取专属 API 访问凭证
+- 🔑 **双模式登录** - 支持验证码登录和密码登录两种方式
+- ✉️ **邮件验证** - 集成 push-all-in-one 邮件服务，发送精美 HTML 验证码邮件
+- 🎯 **用户仪表盘** - 独立用户控制台，查看个人信息、API 密钥和使用统计
+- 📅 **每日签到** - 用户每日签到可自动延长 API 凭证有效期（+24 小时）
+- 📜 **签到历史** - 完整的签到记录查询，支持分页浏览
+- 🛡️ **Turnstile 验证** - 集成 Cloudflare Turnstile 人机验证，防止滥用
+- 👨‍💼 **用户管理** - 管理员可批量启用/禁用用户、延长凭证、重置密钥
+
 ### ⚡ 性能与存储
 - 🚀 **高性能** - 基于 Cloudflare Workers，全球 CDN 加速
 - 🗄️ **多层存储** - 支持 PostgreSQL + Redis + KV 混合架构
@@ -139,10 +149,29 @@ binding = "ACCOUNTS"
 id = "your-accounts-kv-id"  # 替换为实际 ID
 
 [vars]
+# 管理员配置
 ADMIN_TOKEN = "your-secure-admin-token-here"  # 设置强密码
+
+# 用户系统配置 (v3.0.0+)
+AUTH_SECRET = "your-jwt-secret-key-here"  # JWT 签名密钥，建议使用 32 位以上随机字符串
+ENABLE_TURNSTILE = "true"  # 是否启用 Turnstile 人机验证
+TURNSTILE_SITE_KEY = "your-turnstile-site-key"  # Cloudflare Turnstile Site Key
+TURNSTILE_SECRET_KEY = "your-turnstile-secret-key"  # Cloudflare Turnstile Secret Key
+
+# 邮件服务配置 (v3.0.0+)
+EMAIL_FORWARD_URL = "your-push-all-in-one-url"  # push-all-in-one 邮件转发服务地址
+EMAIL_HOST = "smtp.example.com"  # SMTP 服务器地址
+EMAIL_PORT = "587"  # SMTP 端口
+EMAIL_AUTH_USER = "your-email@example.com"  # SMTP 用户名
+EMAIL_AUTH_PASS = "your-email-password"  # SMTP 密码
+EMAIL_SECURE = "true"  # 是否使用 TLS
 ```
 
 > ⚠️ **重要**: `wrangler.toml` 包含敏感信息，已添加到 `.gitignore`，不会被提交到仓库
+>
+> 📧 **邮件服务**: 推荐使用 [push-all-in-one](https://github.com/sinlatansen/push-all-in-one) 作为邮件转发服务
+>
+> 🛡️ **Turnstile**: 在 [Cloudflare Dashboard](https://dash.cloudflare.com/?to=/:account/turnstile) 创建 Turnstile 站点获取密钥
 
 ### 4. 部署
 
