@@ -262,6 +262,7 @@ async function handleProjectDocs(url) {
     'README_EN.md',
     'API_PARAMETERS.md',
     'CONFIGURATION.md',
+    'PROVIDER_TOGGLE.md',
     'PROJECT_SUMMARY.md',
     'CHANGELOG.md',
     'CONTRIBUTING.md',

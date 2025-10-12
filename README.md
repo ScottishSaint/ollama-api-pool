@@ -55,6 +55,7 @@
 - 🔀 **OpenRouter** - 支持 OpenRouter API，访问多种 LLM 模型
 - 🔌 **统一接口** - 所有 Provider 使用相同的 OpenAI 兼容接口
 - 🎯 **智能路由** - 根据路径自动识别 Provider（如 `/openrouter/v1/chat/completions`）
+- 🎚️ **独立控制** <sup>v3.1.0</sup> - 可单独启用/禁用每个 Provider，灵活配置服务范围
 
 ### 💡 核心功能
 - 🔄 **API 轮询** - 自动轮换多个 API Key，均衡负载
@@ -152,6 +153,10 @@ id = "your-accounts-kv-id"  # 替换为实际 ID
 # 管理员配置
 ADMIN_TOKEN = "your-secure-admin-token-here"  # 设置强密码
 
+# Provider 控制 (v3.1.0+)
+DISABLE_OLLAMA = "false"         # 是否禁用 Ollama（默认启用）
+DISABLE_OPENROUTER = "false"     # 是否禁用 OpenRouter（默认启用）
+
 # 用户系统配置 (v3.0.0+)
 AUTH_SECRET = "your-jwt-secret-key-here"  # JWT 签名密钥，建议使用 32 位以上随机字符串
 ENABLE_TURNSTILE = "true"  # 是否启用 Turnstile 人机验证
@@ -172,6 +177,8 @@ EMAIL_SECURE = "true"  # 是否使用 TLS
 > 📧 **邮件服务**: 推荐使用 [push-all-in-one](https://github.com/sinlatansen/push-all-in-one) 作为邮件转发服务
 >
 > 🛡️ **Turnstile**: 在 [Cloudflare Dashboard](https://dash.cloudflare.com/?to=/:account/turnstile) 创建 Turnstile 站点获取密钥
+>
+> 🎚️ **Provider 控制**: 详细说明请参考 [PROVIDER_TOGGLE.md](./PROVIDER_TOGGLE.md)
 
 ### 4. 部署
 
@@ -383,6 +390,10 @@ id = "your-accounts-kv-id"
 # 管理后台密钥（必须修改）
 ADMIN_TOKEN = "your-admin-secret-token"
 
+# Provider 控制 (v3.1.0+)
+DISABLE_OLLAMA = "false"         # 是否禁用 Ollama（默认启用）
+DISABLE_OPENROUTER = "false"     # 是否禁用 OpenRouter（默认启用）
+
 # 功能开关
 ENABLE_ANALYTICS = "true"        # 启用统计分析
 ENABLE_RATE_LIMIT = "true"       # 启用 IP 速率限制
@@ -519,6 +530,8 @@ create table if not exists openrouter_api_keys (
 ## 📚 文档
 
 - **[配置指南](./CONFIGURATION.md)** - 详细的环境变量配置说明
+- **[Provider 开关](./PROVIDER_TOGGLE.md)** - Ollama/OpenRouter 启用禁用指南 <sup>v3.1.0</sup>
+- **[API 参数说明](./API_PARAMETERS.md)** - 透传参数与防封禁机制 <sup>v3.1.0</sup>
 - **[优化措施](./OPTIMIZATION.md)** - KV 优化和性能调优
 - **[贡献指南](./CONTRIBUTING.md)** - 如何参与项目开发
 - **[API 文档](https://ollama-api-pool.h7ml.workers.dev/api-docs)** - 在线 API 文档

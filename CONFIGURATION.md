@@ -110,7 +110,49 @@ EMAIL_SECURE = "true"
 
 ---
 
-### 3. 统计分析开关
+### 3. Provider 控制开关 <sup>v3.1.0+</sup>
+
+```toml
+DISABLE_OLLAMA = "false"         # 是否禁用 Ollama
+DISABLE_OPENROUTER = "false"     # 是否禁用 OpenRouter
+```
+
+**作用**：
+- 独立控制每个 Provider 的启用/禁用状态
+- 灵活配置服务范围（仅 Ollama、仅 OpenRouter、或同时使用）
+
+**详细说明**：
+- 参考完整文档：[PROVIDER_TOGGLE.md](./PROVIDER_TOGGLE.md)
+
+**常见场景**：
+
+1. **仅使用 Ollama**（推荐新手）：
+   ```toml
+   DISABLE_OPENROUTER = "true"  # 禁用 OpenRouter
+   ```
+
+2. **仅使用 OpenRouter**（推荐高级用户）：
+   ```toml
+   DISABLE_OLLAMA = "true"  # 禁用 Ollama
+   ```
+
+3. **同时使用（默认，推荐）**：
+   ```toml
+   # 不设置或设置为 false
+   ```
+
+4. **临时维护**：
+   ```toml
+   DISABLE_OLLAMA = "true"  # 临时禁用 Ollama 进行维护
+   ```
+
+**健康检查**：
+- `/health` 接口显示所有 Provider 状态
+- 禁用时接口返回 503 错误
+
+---
+
+### 4. 统计分析开关
 
 ```toml
 ENABLE_ANALYTICS = "false"  # 推荐值：false

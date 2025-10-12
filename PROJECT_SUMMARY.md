@@ -6,7 +6,7 @@
 - **仓库地址**: https://github.com/dext7r/ollama-api-pool
 - **许可证**: MIT License
 - **技术栈**: Cloudflare Workers, JavaScript, PostgreSQL, Redis
-- **版本**: 3.0.0
+- **版本**: 3.1.0
 
 ## ✨ 核心功能
 
@@ -49,6 +49,19 @@
 - ✅ /v1/models
 - ✅ 流式/非流式支持
 
+### 7. 多 Provider 支持 <sup>v3.1.0</sup>
+- ✅ Ollama 官方 API
+- ✅ OpenRouter API
+- ✅ 统一 OpenAI 兼容接口
+- ✅ 智能路由
+- ✅ 独立启用/禁用控制
+
+### 8. 防封禁机制 <sup>v3.1.0</sup>
+- ✅ 客户端请求头透传（12+ headers）
+- ✅ 随机 User-Agent 池（7种浏览器 UA）
+- ✅ 完整浏览器指纹转发
+- ✅ 兼容多种 AI 客户端
+
 ## 📁 项目结构
 
 ```
@@ -85,11 +98,13 @@ ollama-api-pool/
 │   ├── buildInfo.js            # 构建信息
 │   └── utils.js                # 工具函数
 ├── .gitignore                  # Git 忽略规则
+├── API_PARAMETERS.md           # API 参数透传文档 <sup>v3.1.0</sup>
 ├── CHANGELOG.md                # 变更日志
 ├── CONFIGURATION.md            # 配置指南
 ├── CONTRIBUTING.md             # 贡献指南
 ├── OPTIMIZATION.md             # 优化建议
 ├── PROJECT_SUMMARY.md          # 项目摘要
+├── PROVIDER_TOGGLE.md          # Provider 开关控制说明 <sup>v3.1.0</sup>
 ├── LICENSE                     # MIT 许可证
 ├── package.json                # 项目配置
 ├── README.md                   # 项目文档（中文）

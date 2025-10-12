@@ -335,6 +335,7 @@ export const projectHtml = `<!DOCTYPE html>
                             <option value="">README (默认)</option>
                             <option value="API_PARAMETERS.md">API 参数说明</option>
                             <option value="CONFIGURATION.md">配置指南</option>
+                            <option value="PROVIDER_TOGGLE.md">Provider 开关控制</option>
                             <option value="PROJECT_SUMMARY.md">项目摘要</option>
                             <option value="CHANGELOG.md">更新日志</option>
                             <option value="CONTRIBUTING.md">贡献指南</option>

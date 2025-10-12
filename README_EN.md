@@ -55,6 +55,7 @@ English | [简体中文](./README.md)
 - 🔀 **OpenRouter** - OpenRouter API for accessing multiple LLM models
 - 🔌 **Unified Interface** - All providers use OpenAI-compatible API
 - 🎯 **Smart Routing** - Auto-detect provider from path (e.g., `/openrouter/v1/chat/completions`)
+- 🎚️ **Independent Control** <sup>v3.1.0</sup> - Enable/disable each provider independently for flexible service configuration
 
 ### 💡 Core Features
 - 🔄 **API Rotation** - Automatically rotate multiple API Keys for load balancing
@@ -141,6 +142,10 @@ id = "your-accounts-kv-id"  # Replace with actual ID
 # Admin Configuration
 ADMIN_TOKEN = "your-secure-admin-token-here"  # Set a strong password
 
+# Provider Control (v3.1.0+)
+DISABLE_OLLAMA = "false"         # Disable Ollama (enabled by default)
+DISABLE_OPENROUTER = "false"     # Disable OpenRouter (enabled by default)
+
 # User System Configuration (v3.0.0+)
 AUTH_SECRET = "your-jwt-secret-key-here"  # JWT signing key, recommend 32+ random characters
 ENABLE_TURNSTILE = "true"  # Enable Turnstile bot protection
@@ -161,6 +166,8 @@ EMAIL_SECURE = "true"  # Use TLS
 > 📧 **Email Service**: Recommend using [push-all-in-one](https://github.com/sinlatansen/push-all-in-one) for email forwarding
 >
 > 🛡️ **Turnstile**: Create a Turnstile site in [Cloudflare Dashboard](https://dash.cloudflare.com/?to=/:account/turnstile) to get the keys
+>
+> 🎚️ **Provider Control**: See [PROVIDER_TOGGLE.md](./PROVIDER_TOGGLE.md) for detailed instructions
 
 ### 4. Deploy
 
@@ -372,6 +379,10 @@ id = "your-accounts-kv-id"
 # Admin token (must be changed)
 ADMIN_TOKEN = "your-admin-secret-token"
 
+# Provider Control (v3.1.0+)
+DISABLE_OLLAMA = "false"         # Disable Ollama (enabled by default)
+DISABLE_OPENROUTER = "false"     # Disable OpenRouter (enabled by default)
+
 # Feature switches
 ENABLE_ANALYTICS = "true"        # Enable analytics
 ENABLE_RATE_LIMIT = "true"       # Enable IP rate limiting
@@ -508,6 +519,8 @@ create table if not exists openrouter_api_keys (
 ## 📚 Documentation
 
 - **[Configuration Guide](./CONFIGURATION.md)** - Detailed environment variable configuration
+- **[Provider Toggle](./PROVIDER_TOGGLE.md)** - Ollama/OpenRouter enable/disable guide <sup>v3.1.0</sup>
+- **[API Parameters](./API_PARAMETERS.md)** - Transparent parameters and anti-ban mechanism <sup>v3.1.0</sup>
 - **[Optimization Guide](./OPTIMIZATION.md)** - KV optimization and performance tuning
 - **[Contributing Guide](./CONTRIBUTING.md)** - How to contribute to the project
 - **[API Documentation](https://ollama-api-pool.h7ml.workers.dev/api-docs)** - Online API docs
