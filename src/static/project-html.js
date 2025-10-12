@@ -270,6 +270,102 @@ export const projectHtml = `<!DOCTYPE html>
             background: rgba(148, 163, 184, 0.26);
             color: #111827;
         }
+        .release-card {
+            background: linear-gradient(160deg, rgba(79, 70, 229, 0.08), rgba(14, 165, 233, 0.08));
+            border-radius: 24px;
+            padding: 1.8rem 2rem;
+            border: 1px solid rgba(79, 70, 229, 0.2);
+            box-shadow: 0 26px 56px -40px rgba(79, 70, 229, 0.35);
+        }
+        .release-list {
+            display: grid;
+            gap: 1.2rem;
+            margin-top: 1.2rem;
+        }
+        .release-item {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 18px;
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            padding: 1.2rem 1.4rem;
+            box-shadow: 0 16px 32px -28px rgba(15, 23, 42, 0.45);
+        }
+        .release-header {
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+        }
+        .release-title a {
+            color: #1f2937;
+            font-weight: 600;
+            font-size: 1rem;
+            text-decoration: none;
+        }
+        .release-title a:hover {
+            color: #4338ca;
+            text-decoration: underline;
+        }
+        .release-meta {
+            margin-top: 0.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+        .release-tag {
+            padding: 0.2rem 0.65rem;
+            border-radius: 9999px;
+            background: rgba(99, 102, 241, 0.12);
+            color: #4338ca;
+            font-weight: 600;
+        }
+        .release-time {
+            font-weight: 600;
+        }
+        .release-badges {
+            display: inline-flex;
+            gap: 0.4rem;
+        }
+        .release-summary {
+            margin-top: 0.75rem;
+            font-size: 0.85rem;
+            line-height: 1.55;
+            color: #1e293b;
+        }
+        .release-summary.muted {
+            color: #94a3b8;
+            font-style: italic;
+        }
+        .release-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0 0.45rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .release-badge.prerelease {
+            background: rgba(249, 115, 22, 0.18);
+            color: #ea580c;
+        }
+        .release-badge.draft {
+            background: rgba(148, 163, 184, 0.2);
+            color: #334155;
+        }
+        .release-footer {
+            margin-top: 1.5rem;
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+        @media (max-width: 640px) {
+            .release-card {
+                padding: 1.5rem 1.4rem;
+            }
+            .release-item {
+                padding: 1rem 1.1rem;
+            }
+        }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen flex flex-col text-slate-800">
@@ -323,6 +419,11 @@ export const projectHtml = `<!DOCTYPE html>
                         <h3 class="text-sm font-semibold text-slate-900">最新标签</h3>
                         <p class="mt-2 text-xs text-slate-500">等待加载标签列表…</p>
                     </article>
+                </div>
+
+                <div id="repo-releases" class="release-card">
+                    <h3 class="text-sm font-semibold text-slate-900">版本公告</h3>
+                    <p class="mt-2 text-xs text-slate-500">正在同步 GitHub Releases…</p>
                 </div>
 
                 <div class="flex items-center justify-between flex-wrap gap-4">

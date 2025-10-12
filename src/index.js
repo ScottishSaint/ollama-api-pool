@@ -13,7 +13,14 @@ import { handleProxyRequest } from './proxy';
 import { handleAuth } from './auth';
 import { handleAdmin } from './admin';
 import { handleDashboard, handleUserDashboard } from './dashboard';
-import { corsHeaders, jsonResponse, errorResponse, getRandomUserAgent, isProviderEnabled } from './utils';
+import {
+  corsHeaders,
+  jsonResponse,
+  errorResponse,
+  getRandomUserAgent,
+  isProviderEnabled,
+  toAsiaShanghaiISOString
+} from './utils';
 import { getCachedModels, setCachedModels } from './cache';
 import { countApiKeys, getNextApiKey } from './keyManager';
 import { verifyClientToken } from './auth';
@@ -195,16 +202,15 @@ async function handleProjectMeta() {
       Accept: 'application/vnd.github+json'
     };
 
-    const infoResponse = await fetch(`https://api.github.com/repos/${GITHUB_REPO}`, {
-      headers: baseHeaders
-    });
-
-    const tagsResponse = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/tags?per_page=5`, {
-      headers: baseHeaders
-    });
+    const [infoResponse, tagsResponse, releasesResponse] = await Promise.all([
+      fetch(`https://api.github.com/repos/${GITHUB_REPO}`, { headers: baseHeaders }),
+      fetch(`https://api.github.com/repos/${GITHUB_REPO}/tags?per_page=5`, { headers: baseHeaders }),
+      fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=5`, { headers: baseHeaders })
+    ]);
 
     const infoRaw = infoResponse.ok ? await infoResponse.json() : null;
     let tags = [];
+    let releases = [];
 
     if (tagsResponse.ok) {
       const raw = await tagsResponse.json();
@@ -218,6 +224,35 @@ async function handleProjectMeta() {
             commit_sha: commitSha,
             url: tagName ? `https://github.com/${GITHUB_REPO}/releases/tag/${encodeURIComponent(tagName)}` : '',
             commit_url: commitSha ? `https://github.com/${GITHUB_REPO}/commit/${commitSha}` : ''
+          };
+        });
+      }
+    }
+
+    if (releasesResponse.ok) {
+      const raw = await releasesResponse.json();
+      if (Array.isArray(raw)) {
+        releases = raw.slice(0, 5).map(item => {
+          const publishedAt = item?.published_at || item?.created_at || null;
+          let summary = '';
+          if (item?.body) {
+            summary = item.body
+              .split('\n')
+              .map(line => line.trim())
+              .filter(Boolean)
+              .slice(0, 3)
+              .join('\n')
+              .slice(0, 280);
+          }
+          return {
+            id: item?.id || null,
+            name: item?.name || item?.tag_name || '未命名版本',
+            tagName: item?.tag_name || '',
+            url: item?.html_url || '',
+            publishedAt: publishedAt ? toAsiaShanghaiISOString(publishedAt) : null,
+            prerelease: Boolean(item?.prerelease),
+            draft: Boolean(item?.draft),
+            summary
           };
         });
       }
@@ -237,7 +272,8 @@ async function handleProjectMeta() {
     const record = {
       info: sanitizedInfo,
       tags,
-      fetched_at: new Date(now).toISOString()
+      releases,
+      fetched_at: toAsiaShanghaiISOString(now)
     };
 
     projectMetaCache = { data: record, fetched: now };

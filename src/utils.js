@@ -71,3 +71,44 @@ export function isProviderEnabled(env, provider) {
   }
   return true;
 }
+
+const ASIA_SHANGHAI_OFFSET = '+08:00';
+const ASIA_SHANGHAI_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai',
+  hour12: false,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit'
+});
+
+export function toAsiaShanghaiISOString(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const parts = ASIA_SHANGHAI_FORMATTER.formatToParts(date).reduce((acc, part) => {
+    if (part.type !== 'literal') {
+      acc[part.type] = part.value;
+    }
+    return acc;
+  }, {});
+
+  const year = parts.year || '0000';
+  const month = parts.month || '01';
+  const day = parts.day || '01';
+  const hour = parts.hour || '00';
+  const minute = parts.minute || '00';
+  const second = parts.second || '00';
+
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}${ASIA_SHANGHAI_OFFSET}`;
+}
+
+export function toAsiaShanghaiHourMinute(value) {
+  const iso = toAsiaShanghaiISOString(value);
+  return iso ? iso.slice(11, 16) : null;
+}

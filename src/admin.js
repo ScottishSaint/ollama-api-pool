@@ -2,7 +2,13 @@
  * 管理后台 API 模块
  */
 
-import { errorResponse, jsonResponse, isKvStorageEnabled } from './utils';
+import {
+  errorResponse,
+  jsonResponse,
+  isKvStorageEnabled,
+  toAsiaShanghaiISOString,
+  toAsiaShanghaiHourMinute
+} from './utils';
 import {
   addApiKey, removeApiKey, listApiKeys, importApiKeys,
   getAllKeyStats, disableApiKey, enableApiKey, healthCheckAll,
@@ -1096,7 +1102,8 @@ async function getPublicStats(env, provider = 'ollama') {
       recentTopModels = await getRecentTopModels(env, 24, 3, normalized);
     }
 
-    const generatedAt = new Date().toISOString();
+    const generatedAt = toAsiaShanghaiISOString(Date.now());
+    const lastUpdated = globalStats.lastUpdated ? toAsiaShanghaiISOString(globalStats.lastUpdated) : generatedAt;
     const storageParts = [];
     if (usePostgres) storageParts.push('postgres');
     if (useRedis) storageParts.push('redis');
@@ -1112,7 +1119,7 @@ async function getPublicStats(env, provider = 'ollama') {
         successCount: globalStats.successCount,
         failureCount: globalStats.failureCount,
         successRate: successRateValue.toFixed(2),
-        lastUpdated: globalStats.lastUpdated || generatedAt,
+        lastUpdated,
         totalApiKeys,
         activeKeys,
         failedKeys,
@@ -1140,7 +1147,7 @@ async function getPublicStats(env, provider = 'ollama') {
   } catch (error) {
     console.error('getPublicStats error:', error);
     // 返回默认数据，避免前端报错
-    const generatedAt = new Date().toISOString();
+    const generatedAt = toAsiaShanghaiISOString(Date.now());
     return {
       global: {
         totalRequests: 0,
@@ -1158,7 +1165,7 @@ async function getPublicStats(env, provider = 'ollama') {
       hourlyTrend: Array.from({ length: 24 }, (_, i) => {
         const time = new Date(Date.now() - (23 - i) * 3600000);
         return {
-          hour: time.toISOString().slice(11, 16),
+          hour: toAsiaShanghaiHourMinute(time),
           requests: 0,
           success: 0,
           failure: 0
@@ -1251,8 +1258,9 @@ async function getHourlyStats(env, hours, provider = 'ollama') {
       const hour = time.toISOString().slice(0, 13);
       const hourData = hourDataMap.get(hour) || { requests: 0, success: 0, failure: 0 };
 
+      const hourLabel = toAsiaShanghaiHourMinute(time) || time.toISOString().slice(11, 16);
       stats.push({
-        hour: time.toISOString().slice(11, 16), // HH:mm
+        hour: hourLabel, // HH:mm
         requests: hourData.requests,
         success: hourData.success,
         failure: hourData.failure
@@ -1266,7 +1274,7 @@ async function getHourlyStats(env, hours, provider = 'ollama') {
     return Array.from({ length: hours }, (_, i) => {
       const time = new Date(Date.now() - (hours - 1 - i) * 3600000);
       return {
-        hour: time.toISOString().slice(11, 16),
+        hour: toAsiaShanghaiHourMinute(time) || time.toISOString().slice(11, 16),
         requests: 0,
         success: 0,
         failure: 0
@@ -1397,7 +1405,7 @@ async function getHourlyStatsFromPostgres(env, hours, provider = 'ollama') {
       const hourKey = time.toISOString().slice(0, 13);
       const data = map.get(hourKey) || { requests: 0, success: 0, failure: 0 };
       stats.push({
-        hour: time.toISOString().slice(11, 16),
+        hour: toAsiaShanghaiHourMinute(time) || time.toISOString().slice(11, 16),
         requests: data.requests,
         success: data.success,
         failure: data.failure

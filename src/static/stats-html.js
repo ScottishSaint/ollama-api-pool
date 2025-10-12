@@ -469,7 +469,18 @@ export const statsHtml = `<!DOCTYPE html>
       $('#storage-pill').removeClass('hidden').text(storage.toUpperCase());
 
       const timestamp = meta.generatedAt || data.timestamp;
-      const formattedTime = timestamp ? new Date(timestamp).toLocaleString('zh-CN') : '--';
+      const formattedTime = timestamp
+        ? new Date(timestamp).toLocaleString('zh-CN', {
+            timeZone: 'Asia/Shanghai',
+            hour12: false,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          })
+        : '--';
       $('#metric-sync-time').text(formattedTime);
       $('#footer-last-update').text(formattedTime);
 

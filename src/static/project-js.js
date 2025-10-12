@@ -9,7 +9,7 @@ const REPO_NAME = 'dext7r/ollama-api-pool';
 
 const readmeCache = {};
 const docCache = {};
-const repoCache = { info: null, tags: [], fetchedAt: null };
+const repoCache = { info: null, tags: [], releases: [], fetchedAt: null };
 let currentDocFile = ''; // 当前选中的文档文件
 
 function setActiveTab(lang) {
@@ -29,9 +29,10 @@ function buildLine(icon, content) {
 }
 
 function renderMeta(info, tags, fetchedAt) {
-    var versionCard = document.getElementById('repo-version');
-    var updatedCard = document.getElementById('repo-updated');
-    var tagsCard = document.getElementById('repo-tags');
+  var versionCard = document.getElementById('repo-version');
+  var updatedCard = document.getElementById('repo-updated');
+  var tagsCard = document.getElementById('repo-tags');
+  var releaseCard = document.getElementById('repo-releases');
 
     var repoName = info && info.full_name ? info.full_name : REPO_NAME;
     var branch = info && info.default_branch ? info.default_branch : 'main';
@@ -87,13 +88,65 @@ function renderMeta(info, tags, fetchedAt) {
     } else {
         setCardHtml(tagsCard, '最新标签', '<div class="meta-meta">' + buildLine('🧭', '暂无发布标签记录。') + '</div>');
     }
+
+    if (releaseCard) {
+        renderReleases(repoCache.releases || [], fetchedAt);
+    }
 }
 
 function renderMetaError(message) {
-    var fallback = '<div class="meta-meta">' + buildLine('⚠️', message) + '</div>';
-    setCardHtml(document.getElementById('repo-version'), '版本状态', fallback);
-    setCardHtml(document.getElementById('repo-updated'), '最近更新', fallback);
-    setCardHtml(document.getElementById('repo-tags'), '最新标签', fallback);
+  var fallback = '<div class="meta-meta">' + buildLine('⚠️', message) + '</div>';
+  setCardHtml(document.getElementById('repo-version'), '版本状态', fallback);
+  setCardHtml(document.getElementById('repo-updated'), '最近更新', fallback);
+  setCardHtml(document.getElementById('repo-tags'), '最新标签', fallback);
+  setCardHtml(document.getElementById('repo-releases'), '版本公告', fallback);
+}
+
+function renderReleases(releases, fetchedAt) {
+  var releaseCard = document.getElementById('repo-releases');
+  if (!releaseCard) return;
+
+  if (!Array.isArray(releases) || releases.length === 0) {
+    setCardHtml(releaseCard, '版本公告', '<div class="meta-meta">' + buildLine('ℹ️', '暂无发布公告，稍后再来查看。') + '</div>');
+    return;
+  }
+
+  var listHtml = '<div class="release-list">';
+  releases.forEach(function(item) {
+    if (!item || !item.tagName) return;
+    var published = item.publishedAt
+      ? new Date(item.publishedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
+      : '时间未知';
+    var badges = [];
+    if (item.prerelease) badges.push('<span class="release-badge prerelease">预发布</span>');
+    if (item.draft) badges.push('<span class="release-badge draft">草稿</span>');
+
+    var summaryHtml = '';
+    if (item.summary) {
+      summaryHtml = '<p class="release-summary">' + item.summary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>') + '</p>';
+    }
+
+    listHtml += '<article class="release-item">';
+    listHtml += '<div class="release-header">';
+    listHtml += '<div class="release-title"><a href="' + item.url + '" target="_blank" rel="noopener">' + item.name + '</a></div>';
+    listHtml += '<div class="release-meta">';
+    listHtml += '<span class="release-tag">标签 ' + item.tagName + '</span>';
+    listHtml += '<span class="release-time">' + published + '</span>';
+    if (badges.length) {
+      listHtml += '<span class="release-badges">' + badges.join('') + '</span>';
+    }
+    listHtml += '</div>';
+    listHtml += summaryHtml || '<p class="release-summary muted">暂无公告摘要</p>';
+    listHtml += '</article>';
+  });
+  listHtml += '</div>';
+
+  var footer = '';
+  if (fetchedAt) {
+    footer = '<div class="release-footer">同步时间：<span>' + new Date(fetchedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) + '</span></div>';
+  }
+
+  releaseCard.innerHTML = '<h3 class="text-sm font-semibold text-slate-900">版本公告</h3>' + listHtml + footer;
 }
 
 function renderMermaid(container) {
@@ -136,11 +189,12 @@ async function loadRepoMeta() {
         var data = await response.json();
         repoCache.info = data.info || null;
         repoCache.tags = Array.isArray(data.tags) ? data.tags : [];
+        repoCache.releases = Array.isArray(data.releases) ? data.releases : [];
         repoCache.fetchedAt = data.fetched_at || null;
         renderMeta(repoCache.info, repoCache.tags, repoCache.fetchedAt);
     } catch (error) {
         console.error('加载仓库信息失败:', error);
-        if (repoCache.info || (repoCache.tags && repoCache.tags.length)) {
+        if (repoCache.info || (repoCache.tags && repoCache.tags.length) || (repoCache.releases && repoCache.releases.length)) {
             renderMeta(repoCache.info, repoCache.tags, repoCache.fetchedAt);
         } else {
             renderMetaError('仓库信息加载失败，请稍后重试。');

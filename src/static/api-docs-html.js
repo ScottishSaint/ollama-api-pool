@@ -151,6 +151,7 @@ export const apiDocsHtml = `<!DOCTYPE html>
                 <aside class="space-y-4 rounded-2xl border border-primary/20 bg-white p-6 shadow-soft">
                     <h3 class="text-lg font-semibold text-slate-900">页面导航</h3>
                     <ul class="space-y-3 text-sm text-slate-600">
+                        <li><a href="#project-overview" class="flex items-center gap-2 hover:text-primary transition-colors"><span>🧭</span><span>项目概览</span></a></li>
                         <li><a href="#quick-start" class="flex items-center gap-2 hover:text-primary transition-colors"><span>🚀</span><span>快速开始</span></a></li>
                         <li><a href="#api-reference" class="flex items-center gap-2 hover:text-primary transition-colors"><span>📖</span><span>API 参考</span></a></li>
                         <li><a href="#api-test" class="flex items-center gap-2 hover:text-primary transition-colors"><span>🧪</span><span>在线测试</span></a></li>
@@ -161,6 +162,42 @@ export const apiDocsHtml = `<!DOCTYPE html>
                         API 文档、公开统计与登录页共享顶部导航、信息色与排版节奏，访客可以在不同入口间快速切换并保持认知一致。
                     </div>
                 </aside>
+            </section>
+
+            <section id="project-overview" class="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 lg:p-8 shadow-soft">
+                <header class="space-y-2">
+                    <h3 class="text-2xl font-semibold text-slate-900">🧭 项目运行概览</h3>
+                    <p class="text-sm text-slate-500 leading-relaxed">本节聚焦 Ollama / OpenRouter API Pool 的运行方式与关键能力，帮助你快速了解代理池的交付边界、观测入口与部署实践。</p>
+                </header>
+                <div class="grid gap-4 lg:gap-6 lg:grid-cols-3">
+                    <article class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                        <h4 class="text-sm font-semibold text-slate-900">🌍 服务形态</h4>
+                        <p class="mt-2 text-sm text-slate-600 leading-relaxed">运行于 Cloudflare Workers 边缘网络，所有接口遵循 OpenAI 官方协议（/v1/chat/completions、/v1/models），默认开启 SSE 流式能力。</p>
+                    </article>
+                    <article class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                        <h4 class="text-sm font-semibold text-slate-900">🔌 Provider 组合</h4>
+                        <p class="mt-2 text-sm text-slate-600 leading-relaxed">内置 <span class="font-medium text-slate-800">Ollama</span> 与 <span class="font-medium text-slate-800">OpenRouter</span> 两个提供方，可通过环境变量 <code class="bg-white px-2 py-0.5 rounded text-xs">DISABLE_OLLAMA</code> / <code class="bg-white px-2 py-0.5 rounded text-xs">DISABLE_OPENROUTER</code> 随时开关。</p>
+                    </article>
+                    <article class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                        <h4 class="text-sm font-semibold text-slate-900">⚙️ 调度策略</h4>
+                        <p class="mt-2 text-sm text-slate-600 leading-relaxed">多密钥轮询 + 连续失败熔断，自动禁用故障 Key 并在后台提示管理员复查，保障长期稳定的成功率。</p>
+                    </article>
+                    <article class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                        <h4 class="text-sm font-semibold text-slate-900">🔐 鉴权体系</h4>
+                        <p class="mt-2 text-sm text-slate-600 leading-relaxed">客户端仅需携带 <code class="bg-white px-2 py-0.5 rounded text-xs">Authorization: Bearer CLIENT_TOKEN</code>，后台可视化管理 Token 生命周期，支持每日签到自动延长有效期。</p>
+                    </article>
+                    <article class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                        <h4 class="text-sm font-semibold text-slate-900">🗄️ 数据链路</h4>
+                        <p class="mt-2 text-sm text-slate-600 leading-relaxed">PostgreSQL 存储主数据，Redis 缓存热点统计，Cloudflare KV 用作兜底。统计缓存默认 30 秒刷新，可按需调整。</p>
+                    </article>
+                    <article class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                        <h4 class="text-sm font-semibold text-slate-900">📈 可观测性</h4>
+                        <p class="mt-2 text-sm text-slate-600 leading-relaxed"><a href="/stats" class="text-primary hover:underline">/stats</a> 提供公开指标，管理员可通过 <code class="bg-white px-2 py-0.5 rounded text-xs">/admin/stats</code> 与 <code class="bg-white px-2 py-0.5 rounded text-xs">/dashboard</code> 查看更细粒度的数据、执行健康检查与批量操作。</p>
+                    </article>
+                </div>
+                <div class="rounded-2xl border border-dashed border-primary/30 bg-primary/5 px-5 py-4 text-xs sm:text-sm text-slate-600 leading-relaxed">
+                    👉 开发者建议：首次集成可依次完成“管理员生成客户端 Token → 在下方快速开始模块替换 Base URL → 访问公开统计确认流量 → 登录后台监控 Key 健康”，即可在分钟级完成上线闭环。
+                </div>
             </section>
 
             <section id="quick-start" class="space-y-6">
