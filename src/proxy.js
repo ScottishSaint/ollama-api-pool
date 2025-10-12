@@ -32,14 +32,17 @@ export async function handleProxyRequest(request, env, provider = 'ollama') {
     const clientHeaders = {};
     const headersToForward = [
       'User-Agent',
+      'Accept',
       'Accept-Language',
       'Accept-Encoding',
       'Referer',
+      'HTTP-Referer',  // 某些客户端使用这个非标准写法
       'Origin',
       'DNT',
       'Sec-CH-UA',
       'Sec-CH-UA-Mobile',
-      'Sec-CH-UA-Platform'
+      'Sec-CH-UA-Platform',
+      'X-Title'  // Cherry Studio 等客户端使用
     ];
 
     for (const header of headersToForward) {
@@ -47,6 +50,11 @@ export async function handleProxyRequest(request, env, provider = 'ollama') {
       if (value) {
         clientHeaders[header] = value;
       }
+    }
+
+    // 统一 Referer 头（兼容 HTTP-Referer 和 Referer）
+    if (clientHeaders['HTTP-Referer'] && !clientHeaders['Referer']) {
+      clientHeaders['Referer'] = clientHeaders['HTTP-Referer'];
     }
 
     // 1. User-Agent 检测（基本bot过滤，仅日志，不消耗 KV）
