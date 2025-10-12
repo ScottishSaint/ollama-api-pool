@@ -125,6 +125,22 @@ export const dashboardHtml = `<!DOCTYPE html>
                     <p id="total-client-tokens" class="mt-2 text-3xl font-semibold text-sky-600">0</p>
                     <p class="mt-1 text-xs text-slate-400">已签发的下游授权凭证</p>
                 </div>
+                <div class="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-2xl soft-border p-5 border-2 border-indigo-200">
+                    <div class="flex items-center gap-2">
+                        <p class="text-sm text-slate-500">今日请求</p>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600">实时</span>
+                    </div>
+                    <p id="today-requests" class="mt-2 text-3xl font-semibold text-indigo-600">--</p>
+                    <p class="mt-1 text-xs text-slate-400">24小时内的总调用量</p>
+                </div>
+                <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl soft-border p-5 border-2 border-purple-200">
+                    <div class="flex items-center gap-2">
+                        <p class="text-sm text-slate-500">成功率</p>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-600">健康度</span>
+                    </div>
+                    <p id="success-rate" class="mt-2 text-3xl font-semibold text-purple-600">--</p>
+                    <p class="mt-1 text-xs text-slate-400">API 调用成功比率</p>
+                </div>
             </aside>
         </section>
 
@@ -133,7 +149,7 @@ export const dashboardHtml = `<!DOCTYPE html>
                 <h2 class="text-2xl font-semibold text-slate-900">核心能力速览</h2>
                 <p class="text-sm text-slate-500">下列三个板块覆盖日常管理、导入与监控需求</p>
             </div>
-            <div class="grid gap-4 md:grid-cols-3">
+            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div class="bg-white rounded-2xl soft-border p-6 flex flex-col gap-4">
                     <div class="flex items-center gap-3">
                         <span class="text-xl">🧰</span>
@@ -170,6 +186,23 @@ export const dashboardHtml = `<!DOCTYPE html>
                 </div>
                 <div class="bg-white rounded-2xl soft-border p-6 flex flex-col gap-4">
                     <div class="flex items-center gap-3">
+                        <span class="text-xl">👥</span>
+                        <div>
+                            <h3 class="text-lg font-semibold text-slate-900">用户管理</h3>
+                            <p class="text-xs text-slate-500">查看用户状态、批量禁用、重置或延长凭证</p>
+                        </div>
+                    </div>
+                    <ul class="space-y-2 text-sm text-slate-600">
+                        <li>• 搜索邮箱并查看登录/凭证信息</li>
+                        <li>• 支持批量启用/禁用、延长与重置密钥</li>
+                        <li>• 一键查看签到记录与访问历史</li>
+                    </ul>
+                    <button type="button" onclick="document.querySelector('[data-tab=\\'users\\']').click()" class="mt-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
+                        打开用户管理 →
+                    </button>
+                </div>
+                <div class="bg-white rounded-2xl soft-border p-6 flex flex-col gap-4">
+                    <div class="flex items-center gap-3">
                         <span class="text-xl">📦</span>
                         <div>
                             <h3 class="text-lg font-semibold text-slate-900">批量导入与监控</h3>
@@ -190,6 +223,138 @@ export const dashboardHtml = `<!DOCTYPE html>
                         </button>
                     </div>
                 </div>
+                <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl soft-border p-6 flex flex-col gap-4 border-2 border-blue-200">
+                    <div class="flex items-center gap-3">
+                        <span class="text-xl">💬</span>
+                        <div>
+                            <h3 class="text-lg font-semibold text-slate-900">HiveChat AI 聊天</h3>
+                            <p class="text-xs text-slate-500">专为中小团队设计的 AI 聊天应用</p>
+                        </div>
+                    </div>
+                    <ul class="space-y-2 text-sm text-slate-600">
+                        <li>• 团队协作 AI 对话平台</li>
+                        <li>• 支持多模型切换</li>
+                        <li>• 简洁易用的交互界面</li>
+                    </ul>
+                    <a href="https://hivechat.jhun.edu.kg/?source=https://ollama-api-pool.h7ml.workers.dev" target="_blank" rel="noopener noreferrer" class="mt-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+                        立即访问 →
+                    </a>
+                </div>
+                <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl soft-border p-6 flex flex-col gap-4 border-2 border-purple-200">
+                    <div class="flex items-center gap-3">
+                        <span class="text-xl">🎨</span>
+                        <div>
+                            <h3 class="text-lg font-semibold text-slate-900">HTML2Web</h3>
+                            <p class="text-xs text-slate-500">粘贴代码，实时成站</p>
+                        </div>
+                    </div>
+                    <ul class="space-y-2 text-sm text-slate-600">
+                        <li>• 秒变可分享的创意舞台</li>
+                        <li>• 实时预览，即写即看</li>
+                        <li>• 快速原型与演示工具</li>
+                    </ul>
+                    <a href="https://html2web.jhun.edu.kg/?source=https://ollama-api-pool.h7ml.workers.dev" target="_blank" rel="noopener noreferrer" class="mt-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition-colors">
+                        立即体验 →
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <section class="space-y-6">
+            <div class="flex items-center justify-between gap-4">
+                <h2 class="text-2xl font-semibold text-slate-900">📢 系统公告</h2>
+                <span class="text-xs text-slate-400">System Announcements</span>
+            </div>
+            <div class="grid gap-4 md:grid-cols-2">
+                <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-200 p-6">
+                    <div class="flex items-start gap-3">
+                        <span class="text-2xl">🎉</span>
+                        <div class="flex-1">
+                            <h3 class="text-lg font-semibold text-slate-900">新功能上线</h3>
+                            <p class="mt-2 text-sm text-slate-600 leading-relaxed">
+                                用户认证体系已上线，支持邮箱注册、验证码登录和密码登录。用户可在登录页面快速注册账户，获取专属 API 访问凭证。
+                            </p>
+                            <p class="mt-2 text-xs text-slate-500">发布时间: 2025-10-12</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border-2 border-emerald-200 p-6">
+                    <div class="flex items-start gap-3">
+                        <span class="text-2xl">✨</span>
+                        <div class="flex-1">
+                            <h3 class="text-lg font-semibold text-slate-900">性能优化</h3>
+                            <p class="mt-2 text-sm text-slate-600 leading-relaxed">
+                                PostgreSQL + Redis 混合存储架构持续优化，API 响应速度提升 40%，支持更高并发访问。健康检查机制已加强。
+                            </p>
+                            <p class="mt-2 text-xs text-slate-500">更新时间: 2025-10-09</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="space-y-6">
+            <div class="flex items-center justify-between gap-4">
+                <h2 class="text-2xl font-semibold text-slate-900">🔗 相关项目推荐</h2>
+                <span class="text-xs text-slate-400">Related Projects</span>
+            </div>
+            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <a href="https://hivechat.jhun.edu.kg/?source=https://ollama-api-pool.h7ml.workers.dev" target="_blank" rel="noopener noreferrer" class="group bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-200 p-6 hover:shadow-lg transition-all">
+                    <div class="flex items-center justify-between">
+                        <span class="text-3xl">💬</span>
+                        <svg class="w-5 h-5 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 text-lg font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">HiveChat AI</h3>
+                    <p class="mt-2 text-sm text-slate-600">专为中小团队设计的 AI 聊天应用</p>
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <span class="px-2 py-1 rounded-full bg-blue-100 text-blue-700 text-xs">团队协作</span>
+                        <span class="px-2 py-1 rounded-full bg-blue-100 text-blue-700 text-xs">多模型</span>
+                    </div>
+                </a>
+                <a href="https://html2web.jhun.edu.kg/?source=https://ollama-api-pool.h7ml.workers.dev" target="_blank" rel="noopener noreferrer" class="group bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-2 border-purple-200 p-6 hover:shadow-lg transition-all">
+                    <div class="flex items-center justify-between">
+                        <span class="text-3xl">🎨</span>
+                        <svg class="w-5 h-5 text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 text-lg font-semibold text-slate-900 group-hover:text-purple-600 transition-colors">HTML2Web</h3>
+                    <p class="mt-2 text-sm text-slate-600">粘贴代码，实时成站·秒变创意舞台</p>
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <span class="px-2 py-1 rounded-full bg-purple-100 text-purple-700 text-xs">实时预览</span>
+                        <span class="px-2 py-1 rounded-full bg-purple-100 text-purple-700 text-xs">快速原型</span>
+                    </div>
+                </a>
+                <a href="https://teach.jhun.edu.kg/?source=https://ollama-api-pool.h7ml.workers.dev" target="_blank" rel="noopener noreferrer" class="group bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border-2 border-emerald-200 p-6 hover:shadow-lg transition-all">
+                    <div class="flex items-center justify-between">
+                        <span class="text-3xl">📧</span>
+                        <svg class="w-5 h-5 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 text-lg font-semibold text-slate-900 group-hover:text-emerald-600 transition-colors">Plan University Email</h3>
+                    <p class="mt-2 text-sm text-slate-600">高等教育专用邮件服务平台</p>
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs">教育专用</span>
+                        <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs">高性能</span>
+                    </div>
+                </a>
+                <a href="https://gemini.jhun.edu.kg/?source=https://ollama-api-pool.h7ml.workers.dev" target="_blank" rel="noopener noreferrer" class="group bg-gradient-to-br from-amber-50 to-yellow-50 rounded-2xl border-2 border-amber-200 p-6 hover:shadow-lg transition-all">
+                    <div class="flex items-center justify-between">
+                        <span class="text-3xl">🎓</span>
+                        <svg class="w-5 h-5 text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                        </svg>
+                    </div>
+                    <h3 class="mt-4 text-lg font-semibold text-slate-900 group-hover:text-amber-600 transition-colors">Plan University 公益站</h3>
+                    <p class="mt-2 text-sm text-slate-600">AI智能代理·高等教育解决方案</p>
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <span class="px-2 py-1 rounded-full bg-amber-100 text-amber-700 text-xs">AI代理</span>
+                        <span class="px-2 py-1 rounded-full bg-amber-100 text-amber-700 text-xs">公益服务</span>
+                    </div>
+                </a>
             </div>
         </section>
 
@@ -200,12 +365,60 @@ export const dashboardHtml = `<!DOCTYPE html>
                     <div class="flex flex-wrap gap-2 ml-auto">
                         <button data-tab="api-keys" class="tab-btn px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm" type="button">API Keys</button>
                         <button data-tab="tokens" class="tab-btn px-4 py-2 rounded-lg text-slate-600 hover:text-indigo-600" type="button">客户端 Token</button>
+                        <button data-tab="users" class="tab-btn px-4 py-2 rounded-lg text-slate-600 hover:text-indigo-600" type="button">用户管理</button>
                         <button data-tab="import" class="tab-btn px-4 py-2 rounded-lg text-slate-600 hover:text-indigo-600" type="button">批量导入</button>
                         <button data-tab="stats" class="tab-btn px-4 py-2 rounded-lg text-slate-600 hover:text-indigo-600" type="button">统计分析</button>
                     </div>
                 </header>
 
                 <div class="px-6 md:px-8 py-6 space-y-10">
+                    <div id="users-content" class="tab-content hidden space-y-6">
+                        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                                <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
+                                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 10A7 7 0 103 10a7 7 0 0014 0z" />
+                                    </svg>
+                                    <input id="user-search-input" type="search" placeholder="搜索邮箱" class="w-48 sm:w-64 border-none focus:ring-0 text-sm placeholder:text-slate-400" />
+                                    <button id="user-search-btn" class="px-3 py-1 rounded-lg bg-primary text-white text-sm">搜索</button>
+                                    <button id="users-refresh-btn" class="px-3 py-1 rounded-lg bg-slate-100 text-slate-600 text-sm hover:bg-slate-200">刷新</button>
+                                </div>
+                            </div>
+                            <div class="text-sm text-slate-500">共 <span id="users-total-count">0</span> 位用户</div>
+                        </div>
+
+                        <div id="users-bulk-toolbar" class="hidden flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3 bg-white border border-primary/20 rounded-xl px-4 py-3 shadow-sm">
+                            <div class="text-sm text-slate-600">已选 <span id="users-selected-count" class="font-semibold text-primary">0</span> 位用户</div>
+                            <div class="flex flex-wrap gap-2 text-xs sm:text-sm">
+                                <button id="users-bulk-enable" class="px-3 py-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600">批量启用</button>
+                                <button id="users-bulk-disable" class="px-3 py-2 rounded-lg bg-rose-500 text-white hover:bg-rose-600">批量禁用</button>
+                                <button id="users-bulk-extend" class="px-3 py-2 rounded-lg bg-primary text-white hover:bg-primary/90">批量延长</button>
+                                <button id="users-bulk-reset" class="px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100">批量重置密钥</button>
+                                <button id="users-clear-selection" class="px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100">清除选择</button>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
+                            <table class="w-full text-sm">
+                                <thead class="bg-slate-50 text-slate-500 uppercase tracking-wide text-xs">
+                                    <tr>
+                                        <th class="px-4 py-3 text-center w-12">
+                                            <input type="checkbox" id="users-select-all" class="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary">
+                                        </th>
+                                        <th class="px-6 py-3 text-left">用户</th>
+                                        <th class="px-6 py-3 text-left">角色</th>
+                                        <th class="px-6 py-3 text-left">状态</th>
+                                        <th class="px-6 py-3 text-left">访问凭证</th>
+                                        <th class="px-6 py-3 text-left">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="users-table" class="bg-white divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+
+                        <div id="users-pagination"></div>
+                    </div>
+
                     <div id="api-keys-content" class="tab-content space-y-6">
                         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                             <div>
@@ -238,6 +451,32 @@ export const dashboardHtml = `<!DOCTYPE html>
                                 <p class="text-xs text-slate-500">• 建议优先启用 PostgreSQL 与 Redis，确保导入量大时不触发 KV 写入限制。</p>
                                 <p class="text-xs text-slate-500">• 验证失败的 Key 会被自动标记为失败，可在列表中手动启用。</p>
                             </div>
+                        </div>
+
+                        <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+                            <div class="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+                                <span class="text-slate-500">状态筛选：</span>
+                                <button type="button" data-status-filter="all" class="api-filter-btn px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors active">全部</button>
+                                <button type="button" data-status-filter="active" class="api-filter-btn px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">正常</button>
+                                <button type="button" data-status-filter="disabled" class="api-filter-btn px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">已禁用</button>
+                                <button type="button" data-status-filter="failed" class="api-filter-btn px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">校验失败</button>
+                                <button type="button" data-status-filter="expired" class="api-filter-btn px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">已过期</button>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <div class="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
+                                    <input id="api-key-search-input" type="search" placeholder="按用户名或 Key 搜索" class="w-48 sm:w-64 border-none focus:ring-0 text-sm placeholder:text-slate-400" />
+                                </div>
+                                <button id="api-key-search-btn" class="px-3 py-2 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-colors">搜索</button>
+                                <button id="api-key-search-clear" class="px-3 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm hover:bg-slate-100 transition-colors">清空</button>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+                            <span class="text-slate-500">失效 Key 快捷操作：</span>
+                            <button id="api-keys-verify-invalid" class="px-3 py-2 rounded-lg bg-purple-500 text-white hover:bg-purple-600 transition-colors">验证失效 Key</button>
+                            <button id="api-keys-disable-invalid" class="px-3 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors">禁用失效 Key</button>
+                            <button id="api-keys-enable-disabled" class="px-3 py-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors">启用已禁用 Key</button>
+                            <button id="api-keys-delete-invalid" class="px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">删除失效 Key</button>
                         </div>
 
                         <div id="verify-progress" class="hidden rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">

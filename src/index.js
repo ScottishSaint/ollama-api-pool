@@ -12,7 +12,7 @@
 import { handleProxyRequest } from './proxy';
 import { handleAuth } from './auth';
 import { handleAdmin } from './admin';
-import { handleDashboard } from './dashboard';
+import { handleDashboard, handleUserDashboard } from './dashboard';
 import { corsHeaders, jsonResponse, errorResponse } from './utils';
 import { getCachedModels, setCachedModels } from './cache';
 import { countApiKeys, getNextApiKey } from './keyManager';
@@ -64,22 +64,25 @@ export default {
       if (path === '/' || path === '/dashboard') {
         // 管理后台首页
         return handleDashboard(request, env);
+      } else if (path === '/user' || path === '/user/dashboard') {
+        // 用户后台
+        return handleUserDashboard(request, env);
       } else if (path === '/stats') {
         // 公开统计页面
-        return handleStaticHtml('/stats.html');
+        return handleStaticHtml('/stats.html', env);
       } else if (path === '/api-docs') {
         // API 使用文档
-        return handleStaticHtml('/api-docs.html');
+        return handleStaticHtml('/api-docs.html', env);
       } else if (path === '/project') {
         // 项目介绍页面
-        return handleStaticHtml('/project.html');
+        return handleStaticHtml('/project.html', env);
       } else if (path === '/project/meta') {
         return handleProjectMeta();
       } else if (path === '/api/test-templates') {
         return jsonResponse({ templates: getTestTemplatesPayload() });
       } else if (path.startsWith('/js/')) {
         // 静态 JS 文件
-        return handleStaticJs(path);
+        return handleStaticJs(path, env);
       } else if (path === '/favicon.svg' || path === '/favicon.ico') {
         return new Response(faviconSvg, {
           headers: {
@@ -94,6 +97,8 @@ export default {
             'Cache-Control': 'public, max-age=86400'
           }
         });
+      } else if (path.startsWith('/api/auth/')) {
+        return handleAuth(request, env);
       } else if (path.startsWith('/admin/')) {
         // 管理 API
         return handleAdmin(request, env);
@@ -236,9 +241,9 @@ async function handleModels(request, env, provider = 'ollama') {
     const authHeader = request.headers.get('Authorization');
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const clientToken = authHeader.substring(7);
-      const isValid = await verifyClientToken(clientToken, env, normalized);
-      if (!isValid) {
-        return errorResponse('Invalid API token', 401);
+      const tokenCheck = await verifyClientToken(clientToken, env, normalized);
+      if (!tokenCheck.valid) {
+        return errorResponse(tokenCheck.message || 'Invalid API token', tokenCheck.status || 401);
       }
     }
 
@@ -400,16 +405,28 @@ function getTestTemplatesPayload() {
 }
 
 // 处理静态 JS 文件
-async function handleStaticJs(path) {
+async function handleStaticJs(path, env) {
   // 移除查询参数（如 ?v=2）
   const cleanPath = path.split('?')[0];
 
   if (cleanPath === '/js/login.js') {
     const { loginJs } = await import('./static/login-js');
-    return new Response(loginJs, {
+    const siteKey = env?.TURNSTILE_SITE_KEY || '';
+    const enabled = env?.ENABLE_TURNSTILE === 'true' ? 'true' : 'false';
+    let jsContent = loginJs.replace(/{{TURNSTILE_SITE_KEY}}/g, siteKey);
+    jsContent = jsContent.replace(/{{TURNSTILE_ENABLED}}/g, enabled);
+    return new Response(jsContent, {
       headers: {
         'Content-Type': 'application/javascript; charset=utf-8',
         'Cache-Control': 'public, max-age=3600'
+      }
+    });
+  } else if (cleanPath === '/js/user-dashboard.js') {
+    const { userDashboardJs } = await import('./static/user-dashboard-js');
+    return new Response(userDashboardJs, {
+      headers: {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'public, max-age=1800'
       }
     });
   } else if (cleanPath === '/js/dashboard.js') {
@@ -434,14 +451,14 @@ async function handleStaticJs(path) {
 }
 
 // 处理静态 HTML 文件
-async function handleStaticHtml(path) {
+async function handleStaticHtml(path, env) {
+  const { getBuildTime } = await import('./buildInfo');
+  const buildTime = getBuildTime(env);
+  const applyBuildTime = html => (typeof html === 'string' ? html.replace(/{{BUILD_TIME}}/g, buildTime) : html);
+
   if (path === '/api-docs.html') {
     const { apiDocsHtml } = await import('./static/api-docs-html');
-    const { getBuildTime } = await import('./buildInfo');
-
-    // 注入构建时间
-    const buildTime = getBuildTime();
-    const html = apiDocsHtml.replace('{{BUILD_TIME}}', buildTime);
+    const html = applyBuildTime(apiDocsHtml);
 
     return new Response(html, {
       headers: {
@@ -452,7 +469,7 @@ async function handleStaticHtml(path) {
   } else if (path === '/stats.html') {
     const { statsHtml } = await import('./static/stats-html');
 
-    return new Response(statsHtml, {
+    return new Response(applyBuildTime(statsHtml), {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'public, max-age=300'
@@ -461,7 +478,7 @@ async function handleStaticHtml(path) {
   } else if (path === '/project.html') {
     const { projectHtml } = await import('./static/project-html');
 
-    return new Response(projectHtml, {
+    return new Response(applyBuildTime(projectHtml), {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'public, max-age=600'

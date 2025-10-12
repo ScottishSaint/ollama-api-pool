@@ -111,6 +111,7 @@ function switchTab(tabName, element) {
     // 加载对应数据
     if (tabName === 'api-keys') loadApiKeys();
     else if (tabName === 'tokens') loadClientTokens();
+    else if (tabName === 'users') loadUsers();
     else if (tabName === 'stats') loadStats();
 }
 
@@ -128,6 +129,8 @@ function refreshCurrentView() {
         loadApiKeys(apiKeysPage);
     } else if (currentTab === 'tokens') {
         loadClientTokens();
+    } else if (currentTab === 'users') {
+        loadUsers(usersPage);
     } else if (currentTab === 'stats') {
         loadStats();
     }
@@ -185,29 +188,57 @@ let apiKeysPage = 1;
 let apiKeysPageSize = 10;
 let apiKeysTotalPages = 0;
 let apiKeysTotalCount = 0;
+let apiKeyStatusFilter = 'all';
+let apiKeySearchTerm = '';
+
+let usersData = [];
+let usersPage = 1;
+let usersPageSize = 20;
+let usersTotalPages = 0;
+let usersTotalCount = 0;
+let userSearchTerm = '';
+const selectedUserIds = new Set();
+let usersBulkToolbar = null;
+let usersSelectedCountEl = null;
+let usersSelectAllCheckbox = null;
 
 async function loadApiKeys(page = 1) {
     try {
-        // 使用分页参数请求后端
-        const response = await fetch(withProviderQuery('/admin/api-keys?page=' + page + '&pageSize=' + apiKeysPageSize), {
-            headers: { 'Authorization': \`Bearer \${getToken()}\` }
+        const params = new URLSearchParams({
+            page: String(page),
+            pageSize: String(apiKeysPageSize),
+            status: apiKeyStatusFilter || 'all'
+        });
+        if (apiKeySearchTerm) {
+            params.set('search', apiKeySearchTerm);
+        }
+
+        const response = await fetch(withProviderQuery('/admin/api-keys?' + params.toString()), {
+            headers: { 'Authorization': 'Bearer ' + getToken() }
         });
 
         if (!response.ok) throw new Error('加载失败');
 
         const data = await response.json();
         apiKeysData = data.api_keys || [];
-        apiKeysPage = page;
+        apiKeysPage = Number(data.page || page);
         apiKeysTotalPages = data.totalPages || 0;
         apiKeysTotalCount = data.total || 0;
 
         renderApiKeysTable();
+        updateApiKeyFilterUI();
     } catch (error) {
         showToast('加载 API Keys 失败: ' + error.message, 'error');
     }
 }
 
 function renderApiKeysTable() {
+    const selectAll = $('#select-all-checkbox').get(0);
+    if (selectAll) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+    }
+
     // 后端已经做了分页，直接渲染
     $('#api-keys-table').html(apiKeysData.length === 0
         ? '<tr><td colspan="7" class="text-center py-8 text-gray-500">暂无 API Keys</td></tr>'
@@ -224,8 +255,8 @@ function renderApiKeysTable() {
                         <span id="key-\${index}" class="select-all">\${maskApiKey(key.api_key)}</span>
                     </td>
                     <td class="px-6 py-4">
-                        <span id="status-\${index}" class="px-3 py-1 text-xs rounded-full \${key.status === 'active' ? 'bg-green-100 text-green-700' : key.status === 'disabled' ? 'bg-gray-100 text-gray-700' : 'bg-red-100 text-red-700'}">
-                            \${key.status === 'active' ? '正常' : key.status === 'disabled' ? '已禁用' : '失败'}
+                        <span id="status-\${index}" class="px-3 py-1 text-xs rounded-full \${((key.status || '').toLowerCase() === 'active') ? 'bg-green-100 text-green-700' : ((key.status || '').toLowerCase() === 'disabled') ? 'bg-gray-100 text-gray-600' : ((key.status || '').toLowerCase() === 'expired') ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}">
+                            \${((key.status || '').toLowerCase() === 'active') ? '正常' : ((key.status || '').toLowerCase() === 'disabled') ? '已禁用' : ((key.status || '').toLowerCase() === 'expired') ? '已过期' : '校验失败'}
                         </span>
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-600">
@@ -260,6 +291,52 @@ function renderApiKeysTable() {
 }
 
 // 通用分页控件渲染
+function updateApiKeyFilterUI() {
+    $('.api-filter-btn').each(function() {
+        const status = $(this).data('statusFilter');
+        const isActive = status === apiKeyStatusFilter;
+        $(this)
+            .toggleClass('active', isActive)
+            .removeClass('bg-primary text-white border border-primary/30 shadow-sm')
+            .removeClass('bg-white text-slate-600 border border-slate-200');
+        if (isActive) {
+            $(this).addClass('bg-primary text-white border border-primary/30 shadow-sm');
+        } else {
+            $(this).addClass('bg-white text-slate-600 border border-slate-200');
+        }
+    });
+    const input = $('#api-key-search-input');
+    if (input.length) {
+        input.val(apiKeySearchTerm);
+    }
+}
+
+function applyApiKeySearch() {
+    apiKeySearchTerm = $('#api-key-search-input').val().trim();
+    loadApiKeys(1);
+}
+
+function clearApiKeySearch() {
+    apiKeySearchTerm = '';
+    $('#api-key-search-input').val('');
+    loadApiKeys(1);
+}
+
+async function fetchAllApiKeys(status = 'all', search = '') {
+    const params = new URLSearchParams({ fetch: 'all', status: status || 'all' });
+    if (search) {
+        params.set('search', search);
+    }
+    const response = await fetch(withProviderQuery('/admin/api-keys?' + params.toString()), {
+        headers: { 'Authorization': 'Bearer ' + getToken() }
+    });
+    if (!response.ok) {
+        throw new Error('获取 API Key 列表失败');
+    }
+    const data = await response.json();
+    return Array.isArray(data.api_keys) ? data.api_keys : [];
+}
+
 function renderPagination(containerId, totalItems, currentPage, pageSize, onPageChange) {
     const totalPages = Math.ceil(totalItems / pageSize);
     const container = $(\`#\${containerId}-pagination\`);
@@ -358,6 +435,18 @@ function formatTTL(expiresAt) {
     return \`\${Math.floor(diff / 60000)}分钟\`;
 }
 
+function formatDateTime(value) {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    return y + '-' + m + '-' + d + ' ' + hh + ':' + mm;
+}
+
 // HTML 转义
 function escapeHtml(text) {
     const map = {
@@ -448,27 +537,40 @@ async function copyApiKey(apiKey) {
 }
 
 // 切换 API Key 状态 (启用/禁用)
-async function toggleApiKeyStatus(apiKey, action) {
+async function toggleApiKeyStatus(apiKey, action, options = {}) {
     const actionText = action === 'disable' ? '禁用' : '启用';
+    const silent = Boolean(options.silent);
 
     try {
         const endpoint = action === 'disable' ? '/admin/keys/disable' : '/admin/keys/enable';
+        const body = { apiKey };
+        if (action === 'disable' && options.duration) {
+            body.duration = options.duration;
+        }
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Authorization': \`Bearer \${getToken()}\`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(withProviderBody({ apiKey, duration: action === 'disable' ? 3600 : undefined }))
+            body: JSON.stringify(withProviderBody(body))
         });
 
-        if (!response.ok) throw new Error(\`\${actionText}失败\`);
+        if (!response.ok) throw new Error(actionText + '失败');
 
-        showToast(\`API Key \${actionText}成功\`, 'success');
-        loadApiKeys();
-        loadStats();
+        if (!silent) {
+            showToast('API Key ' + actionText + '成功', 'success');
+            loadApiKeys(apiKeysPage);
+            loadStats();
+        }
+        return true;
     } catch (error) {
-        showToast(\`\${actionText}失败: \` + error.message, 'error');
+        if (!silent) {
+            showToast(actionText + '失败: ' + error.message, 'error');
+        } else {
+            console.error('批量操作失败:', error);
+        }
+        return false;
     }
 }
 
@@ -557,24 +659,27 @@ async function deleteSelectedKeys() {
 
 // 删除全部 API Keys
 async function deleteAllKeys() {
-    if (apiKeysData.length === 0) {
-        showToast('没有可删除的 API Keys', 'warning');
-        return;
+    try {
+        const allKeys = await fetchAllApiKeys('all');
+        if (!allKeys.length) {
+            showToast('没有可删除的 API Keys', 'warning');
+            return;
+        }
+
+        const totalCount = allKeys.length;
+
+        if (!confirm('⚠️ 警告：即将删除全部 ' + totalCount + ' 个 API Keys！\\n\\n此操作不可恢复，请确认是否继续？')) {
+            return;
+        }
+
+        if (!confirm('⚠️ 再次确认：真的要删除全部 ' + totalCount + ' 个 API Keys 吗？\\n\\n请输入"删除全部"后点击确定（只是示意，直接点确定即可）')) {
+            return;
+        }
+
+        await batchDeleteKeys(allKeys.map(item => item.api_key));
+    } catch (error) {
+        showToast('删除全部 Key 时出错: ' + error.message, 'error');
     }
-
-    const totalCount = apiKeysData.length;
-
-    // 三次确认，防止误删
-    if (!confirm(\`⚠️ 警告：即将删除全部 \${totalCount} 个 API Keys！\n\n此操作不可恢复，请确认是否继续？\`)) {
-        return;
-    }
-
-    if (!confirm(\`⚠️ 再次确认：真的要删除全部 \${totalCount} 个 API Keys 吗？\n\n请输入"删除全部"后点击确定（只是示意，直接点确定即可）\`)) {
-        return;
-    }
-
-    const apiKeys = apiKeysData.map(key => key.api_key);
-    await batchDeleteKeys(apiKeys);
 }
 
 // 批量删除核心逻辑
@@ -612,6 +717,97 @@ async function batchDeleteKeys(apiKeys) {
     } catch (error) {
         console.error('批量删除失败:', error);
         showToast('批量删除失败: ' + error.message, 'error');
+    }
+}
+
+
+async function getKeysByStatuses(statuses) {
+    const seen = new Set();
+    const results = [];
+    for (const status of statuses) {
+        const subset = await fetchAllApiKeys(status);
+        subset.forEach(item => {
+            const key = item.api_key;
+            if (!seen.has(key)) {
+                seen.add(key);
+                results.push(item);
+            }
+        });
+    }
+    return results;
+}
+
+async function verifyInvalidKeys() {
+    try {
+        const targets = await getKeysByStatuses(['failed', 'expired']);
+        if (!targets.length) {
+            showToast('当前没有需要验证的失效 Key', 'info');
+            return;
+        }
+        await batchVerifyKeys(targets.map(item => item.api_key));
+    } catch (error) {
+        showToast('验证失效 Key 时出错: ' + error.message, 'error');
+    }
+}
+
+async function disableInvalidKeys() {
+    try {
+        const targets = await getKeysByStatuses(['failed', 'expired']);
+        const pending = targets.filter(item => (item.status || '').toLowerCase() !== 'disabled');
+        if (!pending.length) {
+            showToast('没有需要禁用的失效 Key', 'info');
+            return;
+        }
+        showToast('正在禁用 ' + pending.length + ' 个失效 Key...', 'info');
+        let success = 0;
+        let fail = 0;
+        for (const item of pending) {
+            const ok = await toggleApiKeyStatus(item.api_key, 'disable', { silent: true });
+            if (ok) success++; else fail++;
+        }
+        showToast('禁用完成：成功 ' + success + ' 个' + (fail ? '，失败 ' + fail + ' 个' : ''), fail ? 'warning' : 'success');
+        loadApiKeys(apiKeysPage);
+        loadStats();
+    } catch (error) {
+        showToast('禁用失效 Key 失败: ' + error.message, 'error');
+    }
+}
+
+async function enableDisabledKeys() {
+    try {
+        const targets = await getKeysByStatuses(['disabled']);
+        if (!targets.length) {
+            showToast('当前没有已禁用的 Key', 'info');
+            return;
+        }
+        showToast('正在启用 ' + targets.length + ' 个 Key...', 'info');
+        let success = 0;
+        let fail = 0;
+        for (const item of targets) {
+            const ok = await toggleApiKeyStatus(item.api_key, 'enable', { silent: true });
+            if (ok) success++; else fail++;
+        }
+        showToast('启用完成：成功 ' + success + ' 个' + (fail ? '，失败 ' + fail + ' 个' : ''), fail ? 'warning' : 'success');
+        loadApiKeys(apiKeysPage);
+        loadStats();
+    } catch (error) {
+        showToast('启用 Key 失败: ' + error.message, 'error');
+    }
+}
+
+async function deleteInvalidKeys() {
+    try {
+        const targets = await getKeysByStatuses(['failed', 'expired']);
+        if (!targets.length) {
+            showToast('当前没有需要删除的失效 Key', 'info');
+            return;
+        }
+        if (!confirm('确定要删除 ' + targets.length + ' 个失效 Key 吗？此操作不可恢复！')) {
+            return;
+        }
+        await batchDeleteKeys(targets.map(item => item.api_key));
+    } catch (error) {
+        showToast('删除失效 Key 时出错: ' + error.message, 'error');
     }
 }
 
@@ -830,13 +1026,17 @@ async function verifySelectedKeys() {
 
 // 验证全部 API Keys
 async function verifyAllKeys() {
-    if (apiKeysData.length === 0) {
-        showToast('没有可验证的 API Keys', 'warning');
-        return;
+    try {
+        const allKeys = await fetchAllApiKeys('all');
+        if (!allKeys.length) {
+            showToast('没有可验证的 API Keys', 'warning');
+            return;
+        }
+        await batchVerifyKeys(allKeys.map(item => item.api_key));
+    } catch (error) {
+        showToast('验证全部 Key 时出错: ' + error.message, 'error');
     }
 
-    const apiKeys = apiKeysData.map(key => key.api_key);
-    await batchVerifyKeys(apiKeys);
 }
 
 // 批量验证核心逻辑
@@ -859,7 +1059,7 @@ async function batchVerifyKeys(apiKeys) {
                     'Authorization': \`Bearer \${getToken()}\`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ apiKey })
+                body: JSON.stringify(withProviderBody({ apiKey }))
             });
 
             const result = await response.json();
@@ -1071,6 +1271,408 @@ async function loadStats() {
     }
 }
 
+// ==================== 用户管理 ====================
+
+async function loadUsers(page = 1) {
+    const token = getToken();
+    if (!token) {
+        showToast('未登录或凭证失效', 'error');
+        return;
+    }
+
+    usersPage = page;
+
+    try {
+        const params = new URLSearchParams({
+            page: String(usersPage),
+            pageSize: String(usersPageSize)
+        });
+        if (userSearchTerm) {
+            params.set('search', userSearchTerm);
+        }
+
+        const response = await fetch('/admin/users?' + params.toString(), {
+            headers: {
+                'Authorization': 'Bearer ' + token
+            }
+        });
+
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(text || '加载失败');
+        }
+
+        const data = await response.json();
+        usersData = Array.isArray(data.users) ? data.users : [];
+        usersTotalCount = Number(data.total || 0);
+        usersPage = Number(data.page || usersPage);
+        usersPageSize = Number(data.pageSize || usersPageSize);
+        usersTotalPages = Math.max(1, Math.ceil(usersTotalCount / usersPageSize));
+
+        $('#user-search-input').val(userSearchTerm);
+        $('#users-total-count').text(usersTotalCount);
+
+        renderUsersTable();
+        renderPagination('users', usersTotalCount, usersPage, usersPageSize, function(pageNum) {
+            loadUsers(pageNum);
+        });
+    } catch (error) {
+        console.error('loadUsers error:', error);
+        showToast('加载用户列表失败: ' + error.message, 'error');
+    }
+}
+
+function renderUsersTable() {
+    const tbody = $('#users-table');
+    const validIds = new Set(usersData.map(user => user && user.id != null ? String(user.id) : ''));
+    Array.from(selectedUserIds).forEach(id => {
+        if (!validIds.has(id)) {
+            selectedUserIds.delete(id);
+        }
+    });
+
+    if (!usersData || usersData.length === 0) {
+        tbody.html('<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400">暂无用户数据</td></tr>');
+        updateUserSelectionUI();
+        return;
+    }
+
+    const rows = usersData.map(function(user) {
+        const rawId = user && user.id != null ? String(user.id) : '';
+        const safeUserIdAttr = escapeHtml(rawId);
+        const isSelected = selectedUserIds.has(rawId);
+        const keySnippetRaw = user.keyToken ? (user.keyToken.slice(0, 10) + '•••' + user.keyToken.slice(-4)) : '—';
+        const keySnippet = escapeHtml(keySnippetRaw);
+        const keyExpiresRaw = user.keyExpiresAt ? formatDateTime(user.keyExpiresAt) : '—';
+        const keyExpires = escapeHtml(keyExpiresRaw);
+        const statusBadge = user.isActive
+            ? '<span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-600">启用</span>'
+            : '<span class="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-600">禁用</span>';
+        const roleLabel = user.role === 'admin' ? '管理员' : '普通用户';
+        const createdAt = escapeHtml(formatDateTime(user.createdAt));
+        const lastLogin = escapeHtml(user.lastLoginAt ? formatDateTime(user.lastLoginAt) : '—');
+        const email = escapeHtml(user.email || '');
+        const providerLabel = escapeHtml(user.keyProvider || user.defaultProvider || '—');
+
+        let actions = '';
+        const toggleClass = user.isActive ? 'border-rose-200 text-rose-600 hover:bg-rose-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50';
+        const toggleLabel = user.isActive ? '禁用' : '启用';
+        const toggleNextState = !user.isActive;
+
+        actions += '<button data-user-id="' + safeUserIdAttr + '" onclick="toggleUserActive(this.dataset.userId,' + toggleNextState + ')" class="px-3 py-1 rounded-lg border ' + toggleClass + '">' + toggleLabel + '</button>';
+        actions += '<button data-user-id="' + safeUserIdAttr + '" onclick="resetUserKey(this.dataset.userId)" class="px-3 py-1 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50">重置密钥</button>';
+        actions += '<button data-user-id="' + safeUserIdAttr + '" onclick="extendUserKey(this.dataset.userId,1)" class="px-3 py-1 rounded-lg border border-primary/30 text-primary hover:bg-primary/10">延长 24 小时</button>';
+        actions += '<button data-user-id="' + safeUserIdAttr + '" onclick="viewUserSignins(this.dataset.userId)" class="px-3 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100">签到记录</button>';
+
+        return '<tr>' +
+            '<td class="px-4 py-4 align-top text-center">' +
+                '<input type="checkbox" class="user-select-checkbox w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary" data-user-id="' + safeUserIdAttr + '"' + (isSelected ? ' checked' : '') + '>' +
+            '</td>' +
+            '<td class="px-6 py-4 align-top">' +
+                '<div class="font-medium text-slate-900">' + email + '</div>' +
+                '<div class="text-xs text-slate-500 mt-1">创建：' + createdAt + '</div>' +
+                '<div class="text-xs text-slate-400">最近登录：' + lastLogin + '</div>' +
+            '</td>' +
+            '<td class="px-6 py-4 align-top text-sm text-slate-600">' + roleLabel + '</td>' +
+            '<td class="px-6 py-4 align-top">' + statusBadge + '</td>' +
+            '<td class="px-6 py-4 align-top text-sm text-slate-600">' +
+                '<div>' + keySnippet + '</div>' +
+                '<div class="text-xs text-slate-400">提供方：' + providerLabel + '</div>' +
+                '<div class="text-xs text-slate-400">到期：' + keyExpires + '</div>' +
+            '</td>' +
+            '<td class="px-6 py-4 align-top flex flex-wrap gap-2 text-xs">' + actions + '</td>' +
+        '</tr>';
+    }).join('');
+
+    tbody.html(rows);
+    updateUserSelectionUI();
+}
+
+function getSelectedUserIds() {
+    return Array.from(selectedUserIds);
+}
+
+function updateUserSelectionUI() {
+    const count = selectedUserIds.size;
+    if (usersSelectedCountEl) {
+        usersSelectedCountEl.text(count);
+    }
+    if (usersBulkToolbar) {
+        if (count > 0) {
+            usersBulkToolbar.removeClass('hidden');
+        } else {
+            usersBulkToolbar.addClass('hidden');
+        }
+    }
+    if (usersSelectAllCheckbox && usersSelectAllCheckbox.length) {
+        const total = usersData.length;
+        usersSelectAllCheckbox.prop('checked', count > 0 && count === total);
+        const checkboxEl = usersSelectAllCheckbox.get(0);
+        if (checkboxEl) {
+            checkboxEl.indeterminate = count > 0 && count < total;
+        }
+    }
+}
+
+function clearUserSelection() {
+    selectedUserIds.clear();
+    $('#users-table .user-select-checkbox').prop('checked', false);
+    if (usersSelectAllCheckbox && usersSelectAllCheckbox.length) {
+        usersSelectAllCheckbox.prop('checked', false);
+        const checkboxEl = usersSelectAllCheckbox.get(0);
+        if (checkboxEl) {
+            checkboxEl.indeterminate = false;
+        }
+    }
+    updateUserSelectionUI();
+}
+
+async function toggleUserActive(userId, shouldEnable) {
+    try {
+        const response = await fetch('/admin/users/' + userId, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': 'Bearer ' + getToken(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ isActive: shouldEnable })
+        });
+
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(text || '操作失败');
+        }
+
+        showToast(shouldEnable ? '已启用用户' : '已禁用用户', 'success');
+        loadUsers(usersPage);
+    } catch (error) {
+        console.error('toggleUserActive error:', error);
+        showToast('操作失败: ' + error.message, 'error');
+    }
+}
+
+async function resetUserKey(userId) {
+    if (!confirm('确认为该用户重置访问凭证？')) return;
+
+    try {
+        const response = await fetch('/admin/users/' + userId + '/reset-key', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + getToken(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+        });
+
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(text || '重置失败');
+        }
+
+        showToast('已重置访问凭证', 'success');
+        loadUsers(usersPage);
+    } catch (error) {
+        console.error('resetUserKey error:', error);
+        showToast('重置失败: ' + error.message, 'error');
+    }
+}
+
+async function extendUserKey(userId, days) {
+    if (!confirm('确认为该用户延长 ' + days + ' 天？')) return;
+
+    try {
+        const response = await fetch('/admin/users/' + userId + '/extend-key', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + getToken(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ days: days })
+        });
+
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(text || '延长失败');
+        }
+
+        showToast('访问凭证已延长', 'success');
+        loadUsers(usersPage);
+    } catch (error) {
+        console.error('extendUserKey error:', error);
+        showToast('延长失败: ' + error.message, 'error');
+    }
+}
+
+async function viewUserSignins(userId) {
+    try {
+        const response = await fetch('/admin/users/' + userId + '/signins?limit=10', {
+            headers: {
+                'Authorization': 'Bearer ' + getToken()
+            }
+        });
+
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(text || '加载失败');
+        }
+
+        const data = await response.json();
+        const signins = Array.isArray(data.signins) ? data.signins : [];
+        if (signins.length === 0) {
+            showToast('最近暂无签到记录', 'info');
+            return;
+        }
+
+        const message = signins.map(function(item) {
+            const day = item.sign_day || (item.created_at ? item.created_at.slice(0, 10) : '');
+            const created = item.created_at ? formatDateTime(item.created_at) : '—';
+            return day + '（' + created + '）';
+        }).join('<br>');
+
+        showToast('最近签到：<br>' + message, 'info');
+    } catch (error) {
+        console.error('viewUserSignins error:', error);
+        showToast('获取签到记录失败: ' + error.message, 'error');
+    }
+}
+
+async function bulkToggleUserActive(shouldEnable) {
+    const ids = getSelectedUserIds();
+    if (ids.length === 0) {
+        showToast('请先选择用户', 'error');
+        return;
+    }
+    const actionName = shouldEnable ? '启用' : '禁用';
+    if (!confirm('确认为选中的 ' + ids.length + ' 位用户批量' + actionName + '吗？')) {
+        return;
+    }
+
+    const token = getToken();
+    const failures = [];
+    for (const id of ids) {
+        try {
+            const response = await fetch('/admin/users/' + id, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ isActive: shouldEnable })
+            });
+
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || 'HTTP ' + response.status);
+            }
+        } catch (error) {
+            failures.push({ id, error: error.message });
+        }
+    }
+
+    if (failures.length > 0) {
+        showToast('批量' + actionName + '完成，失败 ' + failures.length + ' 个', failures.length === ids.length ? 'error' : 'warning');
+        console.warn('bulkToggleUserActive failures', failures);
+    } else {
+        showToast('批量' + actionName + '成功', 'success');
+    }
+
+    clearUserSelection();
+    loadUsers(usersPage);
+}
+
+async function bulkExtendUserKeys(defaultDays = 7) {
+    const ids = getSelectedUserIds();
+    if (ids.length === 0) {
+        showToast('请先选择用户', 'error');
+        return;
+    }
+    const input = prompt('请输入延长天数（正整数）', String(defaultDays));
+    if (input === null) return;
+    const days = parseInt(input, 10);
+    if (!Number.isFinite(days) || days <= 0) {
+        showToast('请输入有效的天数', 'error');
+        return;
+    }
+    if (!confirm('确定为选中的 ' + ids.length + ' 位用户延长 ' + days + ' 天？')) {
+        return;
+    }
+
+    const token = getToken();
+    const failures = [];
+    for (const id of ids) {
+        try {
+            const response = await fetch('/admin/users/' + id + '/extend-key', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ days })
+            });
+
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || 'HTTP ' + response.status);
+            }
+        } catch (error) {
+            failures.push({ id, error: error.message });
+        }
+    }
+
+    if (failures.length > 0) {
+        showToast('批量延长完成，失败 ' + failures.length + ' 个', failures.length === ids.length ? 'error' : 'warning');
+        console.warn('bulkExtendUserKeys failures', failures);
+    } else {
+        showToast('批量延长成功', 'success');
+    }
+
+    clearUserSelection();
+    loadUsers(usersPage);
+}
+
+async function bulkResetUserKeys() {
+    const ids = getSelectedUserIds();
+    if (ids.length === 0) {
+        showToast('请先选择用户', 'error');
+        return;
+    }
+    if (!confirm('批量重置会使选中用户的旧访问凭证失效，是否继续？')) {
+        return;
+    }
+
+    const token = getToken();
+    const failures = [];
+    for (const id of ids) {
+        try {
+            const response = await fetch('/admin/users/' + id + '/reset-key', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            });
+
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || 'HTTP ' + response.status);
+            }
+        } catch (error) {
+            failures.push({ id, error: error.message });
+        }
+    }
+
+    if (failures.length > 0) {
+        showToast('批量重置完成，失败 ' + failures.length + ' 个', failures.length === ids.length ? 'error' : 'warning');
+        console.warn('bulkResetUserKeys failures', failures);
+    } else {
+        showToast('批量重置成功', 'success');
+    }
+
+    clearUserSelection();
+    loadUsers(usersPage);
+}
+
 // ==================== 初始化 ====================
 
 $(document).ready(function() {
@@ -1132,5 +1734,113 @@ $(document).ready(function() {
     setInterval(updateTime, 1000);
     updateProjectRuntime();
     setInterval(updateProjectRuntime, 60000);
+
+    $('#user-search-btn').on('click', function() {
+        userSearchTerm = $('#user-search-input').val().trim();
+        loadUsers(1);
+    });
+
+    $('#user-search-input').on('keydown', function(event) {
+        if (event.key === 'Enter') {
+            userSearchTerm = $(this).val().trim();
+            loadUsers(1);
+        }
+    });
+
+    $('#users-refresh-btn').on('click', function() {
+        loadUsers(usersPage);
+    });
+
+    $('#api-key-search-btn').on('click', function() {
+        applyApiKeySearch();
+    });
+
+    $('#api-key-search-input').on('keydown', function(event) {
+        if (event.key === 'Enter') {
+            applyApiKeySearch();
+        }
+    });
+
+    $('#api-key-search-clear').on('click', function() {
+        clearApiKeySearch();
+    });
+
+    $('.api-filter-btn').on('click', function() {
+        const status = $(this).data('statusFilter');
+        apiKeyStatusFilter = status || 'all';
+        updateApiKeyFilterUI();
+        loadApiKeys(1);
+    });
+
+    $('#api-keys-verify-invalid').on('click', verifyInvalidKeys);
+    $('#api-keys-disable-invalid').on('click', disableInvalidKeys);
+    $('#api-keys-enable-disabled').on('click', enableDisabledKeys);
+    $('#api-keys-delete-invalid').on('click', deleteInvalidKeys);
+
+    updateApiKeyFilterUI();
+
+    usersBulkToolbar = $('#users-bulk-toolbar');
+    usersSelectedCountEl = $('#users-selected-count');
+    usersSelectAllCheckbox = $('#users-select-all');
+
+    $('#users-table').on('change', '.user-select-checkbox', function() {
+        const userId = $(this).data('userId');
+        if (!userId) return;
+        const idStr = String(userId);
+        if (this.checked) {
+            selectedUserIds.add(idStr);
+        } else {
+            selectedUserIds.delete(idStr);
+        }
+        updateUserSelectionUI();
+    });
+
+    if (usersSelectAllCheckbox && usersSelectAllCheckbox.length) {
+        usersSelectAllCheckbox.on('change', function() {
+            const checked = $(this).is(':checked');
+            selectedUserIds.clear();
+            if (checked) {
+                usersData.forEach(user => {
+                    if (user && user.id != null) {
+                        selectedUserIds.add(String(user.id));
+                    }
+                });
+            }
+            $('#users-table .user-select-checkbox').each(function() {
+                const id = $(this).data('userId');
+                if (!id && id !== 0) return;
+                const exists = selectedUserIds.has(String(id));
+                this.checked = checked && exists;
+            });
+            updateUserSelectionUI();
+        });
+    }
+
+    $('#users-bulk-enable').on('click', function() {
+        bulkToggleUserActive(true);
+    });
+
+    $('#users-bulk-disable').on('click', function() {
+        bulkToggleUserActive(false);
+    });
+
+    $('#users-bulk-extend').on('click', function() {
+        bulkExtendUserKeys();
+    });
+
+    $('#users-bulk-reset').on('click', function() {
+        bulkResetUserKeys();
+    });
+
+    $('#users-clear-selection').on('click', function() {
+        clearUserSelection();
+    });
+
+    updateUserSelectionUI();
+
+    window.toggleUserActive = toggleUserActive;
+    window.resetUserKey = resetUserKey;
+    window.extendUserKey = extendUserKey;
+    window.viewUserSignins = viewUserSignins;
 });
 `;

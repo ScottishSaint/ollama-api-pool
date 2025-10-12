@@ -6,15 +6,49 @@ import { errorResponse, jsonResponse, isKvStorageEnabled } from './utils';
 import {
   addApiKey, removeApiKey, listApiKeys, importApiKeys,
   getAllKeyStats, disableApiKey, enableApiKey, healthCheckAll,
-  hashApiKey, countApiKeys
+  hashApiKey, countApiKeys,
+  getNextApiKey, markApiKeyFailed
 } from './keyManager';
 import { createClientToken, listClientTokens, deleteClientToken } from './auth';
 import {
   getCachedStats, setCachedStats, invalidateCache, clearAllCache, getCacheStats
 } from './cache';
 import { isRedisEnabled, redisGet, redisScanPattern } from './redis';
-import { isPostgresEnabled, pgImportApiAccountEntries, pgGetGlobalStats, pgListModelStats, pgGetModelHourlyAggregated, pgGetRecentTopModels } from './postgres';
+import {
+  isPostgresEnabled,
+  pgImportApiAccountEntries,
+  pgGetGlobalStats,
+  pgListModelStats,
+  pgGetModelHourlyAggregated,
+  pgGetRecentTopModels,
+  pgListUsers,
+  pgCountUsers,
+  pgUpdateUserMeta,
+  pgGetUserById,
+  pgUpdateClientTokenExpiry,
+  pgListUserSignins
+} from './postgres';
 import { normalizeProvider, getProviderConfig, buildUpstreamHeaders, getDefaultProbeModel } from './providers';
+
+const USER_KEY_DEFAULT_TTL = 3 * 24 * 60 * 60;
+
+function sanitizeAdminUser(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    isActive: user.is_active !== false,
+    defaultProvider: user.default_provider,
+    keyToken: user.key_token,
+    keyProvider: user.key_provider,
+    keyExpiresAt: user.key_expires_at,
+    createdAt: user.created_at,
+    updatedAt: user.updated_at,
+    lastLoginAt: user.last_login_at,
+    lastSignInAt: user.last_sign_in_at
+  };
+}
 
 export async function handleAdmin(request, env) {
   const url = new URL(request.url);
@@ -35,13 +69,164 @@ export async function handleAdmin(request, env) {
   }
 
   // 路由分发
-  if (path === '/admin/api-keys' && request.method === 'GET') {
+  if (path === '/admin/users' && request.method === 'GET') {
+    if (!isPostgresEnabled(env)) {
+      return errorResponse('PostgreSQL 支持未启用，无法使用用户管理功能', 400);
+    }
+
+    const page = Math.max(1, parseInt(url.searchParams.get('page')) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get('pageSize')) || 20));
+    const search = (url.searchParams.get('search') || '').trim();
+
+    const users = await pgListUsers(env, { page, pageSize, search: search || undefined });
+    const total = await pgCountUsers(env, search || undefined);
+
+    return jsonResponse({
+      page,
+      pageSize,
+      total,
+      users: users.map(sanitizeAdminUser)
+    });
+
+  } else if (path.startsWith('/admin/users/')) {
+    if (!isPostgresEnabled(env)) {
+      return errorResponse('PostgreSQL 支持未启用，无法使用用户管理功能', 400);
+    }
+
+    const base = '/admin/users/';
+    const remainder = path.substring(base.length);
+    if (!remainder) {
+      return errorResponse('用户 ID 缺失', 400);
+    }
+
+    const [userId, action] = remainder.split('/');
+
+    if (!userId) {
+      return errorResponse('用户 ID 缺失', 400);
+    }
+
+    if (!action && request.method === 'GET') {
+      const user = await pgGetUserById(env, userId);
+      if (!user) {
+        return errorResponse('用户不存在', 404);
+      }
+      return jsonResponse({ user: sanitizeAdminUser(user) });
+    }
+
+    if (!action && request.method === 'PATCH') {
+      const body = await request.json();
+      const updates = {};
+
+      if (body.role) {
+        updates.role = body.role;
+      }
+      if (body.isActive !== undefined) {
+        updates.is_active = Boolean(body.isActive);
+      }
+      if (body.defaultProvider) {
+        updates.default_provider = normalizeProvider(body.defaultProvider);
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return errorResponse('未提供需要更新的字段', 400);
+      }
+
+      updates.updated_at = new Date().toISOString();
+
+      await pgUpdateUserMeta(env, userId, updates);
+      const updated = await pgGetUserById(env, userId);
+      if (!updated) {
+        return errorResponse('用户不存在', 404);
+      }
+      return jsonResponse({ user: sanitizeAdminUser(updated) });
+    }
+
+    if (action === 'reset-key' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const ttlSeconds = Number(body.ttlSeconds) > 0 ? Number(body.ttlSeconds) : USER_KEY_DEFAULT_TTL;
+      const providerInput = body.provider;
+
+      const user = await pgGetUserById(env, userId);
+      if (!user) {
+        return errorResponse('用户不存在', 404);
+      }
+
+      const provider = normalizeProvider(providerInput || user.key_provider || user.default_provider || 'ollama');
+
+      if (user.key_token) {
+        await deleteClientToken(env, user.key_token, normalizeProvider(user.key_provider || provider));
+      }
+
+      const tokenInfo = await createClientToken(env, body.name || `用户 ${user.email} 重置`, ttlSeconds, provider);
+
+      await pgUpdateUserMeta(env, userId, {
+        key_token: tokenInfo.token,
+        key_provider: provider,
+        key_expires_at: tokenInfo.expiresAt,
+        updated_at: new Date().toISOString()
+      });
+
+      const refreshed = await pgGetUserById(env, userId);
+      return jsonResponse({
+        success: true,
+        user: sanitizeAdminUser(refreshed),
+        token: tokenInfo
+      });
+    }
+
+    if (action === 'extend-key' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const days = Number(body.days) > 0 ? Number(body.days) : 1;
+
+      const user = await pgGetUserById(env, userId);
+      if (!user) {
+        return errorResponse('用户不存在', 404);
+      }
+
+      if (!user.key_token) {
+        return errorResponse('用户尚未拥有访问凭证，请先重置密钥', 400);
+      }
+
+      const provider = normalizeProvider(user.key_provider || user.default_provider || 'ollama');
+      const baseTime = Math.max(Date.now(), user.key_expires_at ? new Date(user.key_expires_at).getTime() : Date.now());
+      const newExpiresAt = new Date(baseTime + days * 24 * 60 * 60 * 1000).toISOString();
+
+      await pgUpdateClientTokenExpiry(env, user.key_token, provider, newExpiresAt);
+      await pgUpdateUserMeta(env, userId, {
+        key_expires_at: newExpiresAt,
+        updated_at: new Date().toISOString()
+      });
+
+      const refreshed = await pgGetUserById(env, userId);
+      return jsonResponse({ success: true, user: sanitizeAdminUser(refreshed) });
+    }
+
+    if (action === 'signins' && request.method === 'GET') {
+      const limit = Math.min(90, Math.max(1, parseInt(url.searchParams.get('limit')) || 10));
+      const signins = await pgListUserSignins(env, userId, limit);
+      return jsonResponse({ signins });
+    }
+
+    return errorResponse('Not Found', 404);
+
+  } else if (path === '/admin/api-keys' && request.method === 'GET') {
     // 获取 API Key 列表（优化版：支持分页，避免一次加载所有）
     const url = new URL(request.url);
-    const page = parseInt(url.searchParams.get('page')) || 1;
-    const pageSize = parseInt(url.searchParams.get('pageSize')) || 50; // 默认每页50个
+    const fetchAll = url.searchParams.get('fetch') === 'all';
+    const page = Math.max(1, parseInt(url.searchParams.get('page')) || 1);
+    const pageSizeParam = parseInt(url.searchParams.get('pageSize'));
+    const pageSize = fetchAll ? Math.max(1, Number.MAX_SAFE_INTEGER) : (Number.isFinite(pageSizeParam) ? Math.min(200, Math.max(1, pageSizeParam)) : 50);
+    const status = (url.searchParams.get('status') || 'all').toLowerCase();
+    const search = (url.searchParams.get('search') || '').trim();
 
-    const result = await listApiKeysPaginated(env, page, pageSize, providerParam);
+    const result = await listApiKeysPaginated(env, {
+      page,
+      pageSize,
+      provider: providerParam,
+      status,
+      search,
+      fetchAll
+    });
     return jsonResponse(result);
 
   } else if (path === '/admin/api-keys' && request.method === 'POST') {
@@ -303,21 +488,54 @@ async function getStats(env, provider = 'ollama') {
 }
 
 // 分页获取 API Keys（优化版 - 快速版本，不查询每个key的详细状态）
-async function listApiKeysPaginated(env, page = 1, pageSize = 50, provider = 'ollama') {
+async function listApiKeysPaginated(env, {
+  page = 1,
+  pageSize = 50,
+  provider = 'ollama',
+  status = 'all',
+  search = '',
+  fetchAll = false
+} = {}) {
   const normalized = normalizeProvider(provider);
-  const total = await countApiKeys(env, normalized);
   const allKeys = await listApiKeys(env, normalized);
-  const totalPages = Math.ceil(total / pageSize);
 
-  // 分页切片
-  const startIndex = (page - 1) * pageSize;
+  let filtered = Array.isArray(allKeys) ? allKeys : [];
+  const searchTerm = search ? search.toLowerCase() : '';
+
+  if (status && status !== 'all') {
+    filtered = filtered.filter(key => (key.status || '').toLowerCase() === status);
+  }
+
+  if (searchTerm) {
+    filtered = filtered.filter(key => {
+      const username = (key.username || '').toLowerCase();
+      const apiKey = (key.api_key || '').toLowerCase();
+      return username.includes(searchTerm) || apiKey.includes(searchTerm);
+    });
+  }
+
+  const total = filtered.length;
+
+  if (fetchAll) {
+    return {
+      api_keys: filtered,
+      total,
+      page: 1,
+      pageSize: total,
+      totalPages: 1
+    };
+  }
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  const startIndex = (currentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
-  const pageKeys = Array.isArray(allKeys) ? allKeys.slice(startIndex, endIndex) : [];
+  const pageKeys = filtered.slice(startIndex, endIndex);
 
   return {
     api_keys: pageKeys,
     total,
-    page,
+    page: currentPage,
     pageSize,
     totalPages
   };

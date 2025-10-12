@@ -63,9 +63,9 @@ export async function handleProxyRequest(request, env, provider = 'ollama') {
     }
 
     const clientToken = authHeader.substring(7);
-    const isValid = await verifyClientToken(clientToken, env, normalizedProvider);
-    if (!isValid) {
-      return errorResponse('Invalid API token', 401);
+    const tokenCheck = await verifyClientToken(clientToken, env, normalizedProvider);
+    if (!tokenCheck.valid) {
+      return errorResponse(tokenCheck.message || 'Invalid API token', tokenCheck.status || 401);
     }
 
     // 解析请求体

@@ -880,6 +880,225 @@ export async function pgCreateEmailVerificationCode(env, {
   return null;
 }
 
+export async function pgGetLatestEmailVerificationCode(env, email, purpose) {
+  return await pgRequest(env, {
+    table: GLOBAL_TABLES.emailCodes,
+    query: {
+      select: 'id,email,code,purpose,status,expires_at,created_at',
+      email: `eq.${email.toLowerCase()}`,
+      purpose: `eq.${purpose}`,
+      status: 'eq.pending',
+      order: 'created_at.desc',
+      limit: '1'
+    },
+    single: true
+  });
+}
+
+export async function pgMarkEmailCodeUsed(env, codeId, status = 'used') {
+  if (!codeId) return;
+  await pgRequest(env, {
+    method: 'PATCH',
+    table: GLOBAL_TABLES.emailCodes,
+    query: {
+      id: `eq.${codeId}`
+    },
+    body: {
+      status,
+      used_at: new Date().toISOString()
+    },
+    prefer: 'return=minimal'
+  });
+}
+
+export async function pgCreateUser(env, {
+  email,
+  passwordHash,
+  defaultProvider = 'ollama',
+  keyToken = null,
+  keyProvider = 'ollama',
+  keyExpiresAt = null
+}) {
+  const body = [{
+    email: email.toLowerCase(),
+    password_hash: passwordHash || null,
+    default_provider: defaultProvider,
+    key_token: keyToken,
+    key_provider: keyProvider,
+    key_expires_at: keyExpiresAt
+  }];
+
+  const result = await pgRequest(env, {
+    method: 'POST',
+    table: GLOBAL_TABLES.users,
+    body,
+    prefer: 'return=representation'
+  });
+
+  if (Array.isArray(result) && result.length > 0) {
+    return result[0];
+  }
+  return null;
+}
+
+export async function pgGetUserById(env, userId) {
+  return await pgRequest(env, {
+    table: GLOBAL_TABLES.users,
+    query: {
+      select: 'id,email,password_hash,is_active,role,default_provider,key_token,key_provider,key_expires_at,created_at,updated_at,last_login_at,last_sign_in_at',
+      id: `eq.${userId}`
+    },
+    single: true
+  });
+}
+
+export async function pgUpdateUserMeta(env, userId, updates) {
+  if (!userId || !updates) return;
+  await pgRequest(env, {
+    method: 'PATCH',
+    table: GLOBAL_TABLES.users,
+    query: {
+      id: `eq.${userId}`
+    },
+    body: updates,
+    prefer: 'return=minimal'
+  });
+}
+
+export async function pgUpdateClientTokenExpiry(env, token, provider = 'ollama', expiresAt) {
+  if (!token) return;
+  const normalized = normalizeProvider(provider);
+  const tables = getTables(normalized);
+  await pgRequest(env, {
+    method: 'PATCH',
+    table: tables.clientTokens,
+    query: {
+      token: `eq.${token}`
+    },
+    body: {
+      expires_at: expiresAt
+    },
+    prefer: 'return=minimal'
+  });
+}
+
+export async function pgGetUserByKeyToken(env, keyToken) {
+  if (!keyToken) return null;
+  return await pgRequest(env, {
+    table: GLOBAL_TABLES.users,
+    query: {
+      select: 'id,email,password_hash,is_active,role,default_provider,key_token,key_provider,key_expires_at,created_at,updated_at,last_login_at,last_sign_in_at',
+      key_token: `eq.${keyToken}`
+    },
+    single: true
+  });
+}
+
+export async function pgCreateUserSignin(env, userId, signDay = null) {
+  const body = [{
+    user_id: userId,
+    ...(signDay ? { sign_day: signDay } : {})
+  }];
+
+  const result = await pgRequest(env, {
+    method: 'POST',
+    table: GLOBAL_TABLES.userSignins,
+    body,
+    prefer: 'resolution=ignore-duplicates,return=representation'
+  });
+
+  if (Array.isArray(result) && result.length > 0) {
+    return result[0];
+  }
+  return null;
+}
+
+export async function pgHasUserSignedOnDay(env, userId, signDay) {
+  const rows = await pgRequest(env, {
+    table: GLOBAL_TABLES.userSignins,
+    query: {
+      select: 'id',
+      user_id: `eq.${userId}`,
+      sign_day: `eq.${signDay}`,
+      limit: '1'
+    }
+  });
+
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+export async function pgListUsers(env, { page = 1, pageSize = 20, search } = {}) {
+  const offset = Math.max(0, (page - 1) * pageSize);
+  const query = {
+    select: 'id,email,is_active,role,default_provider,key_token,key_provider,key_expires_at,created_at,updated_at,last_login_at,last_sign_in_at',
+    order: 'created_at.desc',
+    limit: String(pageSize),
+    offset: String(offset)
+  };
+
+  if (search) {
+    query.email = `ilike.*${search}*`;
+  }
+
+  const rows = await pgRequest(env, {
+    table: GLOBAL_TABLES.users,
+    query
+  });
+
+  return Array.isArray(rows) ? rows : [];
+}
+
+export async function pgCountUsers(env, search) {
+  const query = {
+    select: 'count=id',
+    limit: '1'
+  };
+  if (search) {
+    query.email = `ilike.*${search}*`;
+  }
+
+  const row = await pgRequest(env, {
+    table: GLOBAL_TABLES.users,
+    query,
+    single: true
+  });
+
+  const value = row && (row.count ?? row.count_id ?? Object.values(row)[0]);
+  return Number(value || 0);
+}
+
+export async function pgListUserSignins(env, userId, limit = 10, offset = 0) {
+  const safeLimit = Math.max(1, Math.min(100, Number(limit) || 10));
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  const rows = await pgRequest(env, {
+    table: GLOBAL_TABLES.userSignins,
+    query: {
+      select: 'id,user_id,sign_day,created_at',
+      user_id: `eq.${userId}`,
+      order: 'sign_day.desc',
+      limit: String(safeLimit),
+      offset: String(safeOffset)
+    }
+  });
+
+  return Array.isArray(rows) ? rows : [];
+}
+
+export async function pgCountUserSignins(env, userId) {
+  const row = await pgRequest(env, {
+    table: GLOBAL_TABLES.userSignins,
+    query: {
+      select: 'count=id',
+      user_id: `eq.${userId}`,
+      limit: '1'
+    },
+    single: true
+  });
+
+  const value = row && (row.count ?? row.count_id ?? Object.values(row)[0]);
+  return Number(value || 0);
+}
+
 export async function pgGetUserByEmail(env, email) {
   if (!email) return null;
   return await pgRequest(env, {

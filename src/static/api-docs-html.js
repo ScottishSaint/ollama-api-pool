@@ -375,6 +375,13 @@ export const apiDocsHtml = `<!DOCTYPE html>
                             <div class="col-span-full text-xs text-slate-500">模板加载中...</div>
                         </div>
 
+                        <div class="space-y-3">
+                            <button id="batch-test-btn" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold py-3 px-6 rounded-lg transition duration-200">
+                                批量流式测试所有模板
+                            </button>
+                            <div id="batch-results" class="hidden space-y-3 text-sm text-slate-600"></div>
+                        </div>
+
                         <button onclick="testAPI()" class="w-full bg-primary hover:bg-primary/90 text-white font-semibold py-3 px-6 rounded-lg transition duration-200">
                             发送测试请求
                         </button>
@@ -660,14 +667,15 @@ console.log(data);</pre></div>
             document.getElementById('responseContainer').classList.remove('hidden');
         }
 
-        async function handleStreamResponse(token, requestBody) {
+        async function performStreamRequest(token, requestBody, onChunk) {
+            const body = Object.assign({}, requestBody, { stream: true });
             const response = await fetch('/v1/chat/completions', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': 'Bearer ' + token
                 },
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify(body)
             });
 
             if (!response.ok) {
@@ -675,15 +683,12 @@ console.log(data);</pre></div>
                 throw new Error(error.error || 'HTTP ' + response.status);
             }
 
-            const streamDiv = document.getElementById('streamResponse');
-            streamDiv.textContent = '';
-            document.getElementById('streamContainer').classList.remove('hidden');
-
             const reader = response.body?.getReader();
             if (!reader) {
                 throw new Error('当前浏览器不支持流式读取，请使用最新版本。');
             }
             const decoder = new TextDecoder();
+            let aggregated = '';
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -700,13 +705,29 @@ console.log(data);</pre></div>
                         try {
                             const json = JSON.parse(data);
                             const content = json.choices?.[0]?.delta?.content || '';
-                            streamDiv.textContent += content;
+                            if (content) {
+                                aggregated += content;
+                                if (typeof onChunk === 'function') {
+                                    onChunk(content);
+                                }
+                            }
                         } catch (e) {
                             console.error('解析流式片段失败:', e);
                         }
                     }
                 }
             }
+
+            return aggregated;
+        }
+
+        async function handleStreamResponse(token, requestBody) {
+            const streamDiv = document.getElementById('streamResponse');
+            streamDiv.textContent = '';
+            document.getElementById('streamContainer').classList.remove('hidden');
+            await performStreamRequest(token, requestBody, (chunk) => {
+                streamDiv.textContent += chunk;
+            });
         }
 
         function showError(message) {
@@ -814,7 +835,10 @@ console.log(data);</pre></div>
 
             const templatesContainer = document.getElementById('template-buttons');
             const tempValueLabel = document.getElementById('tempValue');
+            const batchBtn = document.getElementById('batch-test-btn');
+            const batchResults = document.getElementById('batch-results');
             let templatesMap = {};
+            let isBatchRunning = false;
 
             function renderTemplates(list) {
                 if (!templatesContainer) return;
@@ -914,6 +938,89 @@ console.log(data);</pre></div>
                 const label = template.label || btn.textContent.trim();
                 showToast('已填充模板：' + label, 'success');
             });
+
+            async function runBatchTests() {
+                if (isBatchRunning) {
+                    showToast('批量测试正在进行，请稍候', 'info');
+                    return;
+                }
+
+                const token = document.getElementById('apiToken').value.trim();
+                if (!token) {
+                    showError('请输入 API Token');
+                    return;
+                }
+
+                const modelSelect = document.getElementById('model');
+                const model = modelSelect ? modelSelect.value : 'llama2';
+                const templatesList = Object.values(templatesMap);
+
+                if (!templatesList.length) {
+                    showToast('暂无模板可执行，请先加载模板', 'error');
+                    return;
+                }
+
+                isBatchRunning = true;
+                if (batchBtn) {
+                    batchBtn.disabled = true;
+                    batchBtn.classList.add('opacity-70', 'cursor-not-allowed');
+                }
+                if (batchResults) {
+                    batchResults.classList.remove('hidden');
+                    batchResults.innerHTML = '';
+                }
+
+                for (const template of templatesList) {
+                    const entry = document.createElement('div');
+                    entry.className = 'rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2';
+                    const header = document.createElement('div');
+                    header.className = 'flex items-center justify-between gap-3 text-sm';
+                    header.innerHTML = '<span class="font-semibold text-slate-800">' + (template.label || template.id) + '</span>' +
+                        '<span class="text-xs text-slate-400">执行中...</span>';
+                    const statusEl = header.querySelector('span:last-child');
+                    const resultPre = document.createElement('pre');
+                    resultPre.className = 'whitespace-pre-wrap text-slate-700 text-sm bg-slate-50 rounded-lg p-3 max-h-60 overflow-y-auto';
+                    entry.appendChild(header);
+                    entry.appendChild(resultPre);
+                    batchResults?.appendChild(entry);
+
+                    const messages = [];
+                    if (template.systemPrompt) {
+                        messages.push({ role: 'system', content: template.systemPrompt });
+                    }
+                    messages.push({ role: 'user', content: template.userMessage || 'Hello' });
+                    const baseTemp = typeof template.temperature === 'number'
+                        ? template.temperature
+                        : Number.parseFloat(temperatureInput.value) || 0.7;
+
+                    const body = {
+                        model,
+                        messages,
+                        temperature: baseTemp,
+                        stream: true
+                    };
+
+                    try {
+                        await performStreamRequest(token, body, (chunk) => {
+                            resultPre.textContent += chunk;
+                        });
+                        statusEl.textContent = '完成';
+                        statusEl.className = 'text-xs text-emerald-600 font-medium';
+                    } catch (error) {
+                        statusEl.textContent = error.message || '执行失败';
+                        statusEl.className = 'text-xs text-rose-600 font-medium';
+                    }
+                }
+
+                showToast('批量测试完成', 'success');
+                isBatchRunning = false;
+                if (batchBtn) {
+                    batchBtn.disabled = false;
+                    batchBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+                }
+            }
+
+            batchBtn?.addEventListener('click', runBatchTests);
 
             loadTemplatesFromApi();
 
