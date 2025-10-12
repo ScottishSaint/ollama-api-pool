@@ -4,10 +4,13 @@ export const projectJs = `const README_SOURCES = {
 };
 
 const REPO_META_URL = '/project/meta';
+const PROJECT_DOCS_URL = '/project/docs';
 const REPO_NAME = 'dext7r/ollama-api-pool';
 
 const readmeCache = {};
+const docCache = {};
 const repoCache = { info: null, tags: [], fetchedAt: null };
+let currentDocFile = ''; // 当前选中的文档文件
 
 function setActiveTab(lang) {
     var buttons = document.querySelectorAll('.lang-switch button');
@@ -173,12 +176,42 @@ async function loadReadme(lang) {
     }
 }
 
+// 加载项目文档（其他 MD 文件）
+async function loadProjectDoc(fileName) {
+    var container = document.getElementById('project-content');
+    if (!container) return;
+
+    if (docCache[fileName]) {
+        container.innerHTML = docCache[fileName];
+        renderMermaid(container);
+        return;
+    }
+
+    container.innerHTML = "<p style='color:#64748b;'>正在从 GitHub 获取 " + fileName + "…</p>";
+
+    try {
+        var response = await fetch(PROJECT_DOCS_URL + '?file=' + encodeURIComponent(fileName));
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
+        }
+        var markdown = await response.text();
+        var html = window.marked.parse(markdown, { mangle: false, headerIds: true });
+        docCache[fileName] = html;
+        container.innerHTML = html;
+        renderMermaid(container);
+    } catch (error) {
+        console.error('加载文档失败:', error);
+        container.innerHTML = "<div class='callout' style='background:#fee2e2;border:1px solid #fecaca;border-radius:12px;padding:16px;color:#991b1b;'>加载 " + fileName + " 失败，请稍后重试。</div>";
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     var defaultLang = 'zh';
     setActiveTab(defaultLang);
     loadReadme(defaultLang);
     loadRepoMeta();
 
+    // README 语言切换按钮
     var buttons = document.querySelectorAll('.lang-switch button');
     buttons.forEach(function(button) {
         button.addEventListener('click', function() {
@@ -186,9 +219,41 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!lang || button.classList.contains('active')) {
                 return;
             }
-            setActiveTab(lang);
-            loadReadme(lang);
+            // 只有在查看 README 时才允许切换语言
+            if (!currentDocFile) {
+                setActiveTab(lang);
+                loadReadme(lang);
+            }
         });
     });
+
+    // 文档选择器
+    var docSelector = document.getElementById('doc-selector');
+    if (docSelector) {
+        docSelector.addEventListener('change', function() {
+            var fileName = docSelector.value;
+            currentDocFile = fileName;
+
+            if (fileName) {
+                // 选择了具体文档，隐藏语言切换按钮
+                var langSwitch = document.querySelector('.lang-switch');
+                if (langSwitch) {
+                    langSwitch.style.opacity = '0.5';
+                    langSwitch.style.pointerEvents = 'none';
+                }
+                loadProjectDoc(fileName);
+            } else {
+                // 返回 README，显示语言切换按钮
+                var langSwitch = document.querySelector('.lang-switch');
+                if (langSwitch) {
+                    langSwitch.style.opacity = '1';
+                    langSwitch.style.pointerEvents = 'auto';
+                }
+                var activeLang = document.querySelector('.lang-switch button.active');
+                var lang = activeLang ? activeLang.getAttribute('data-lang') : 'zh';
+                loadReadme(lang);
+            }
+        });
+    }
 });
 `;

@@ -330,7 +330,17 @@ export const projectHtml = `<!DOCTYPE html>
                         <button type="button" class="active" data-lang="zh">简体中文</button>
                         <button type="button" data-lang="en">English</button>
                     </div>
-                    <span class="text-xs text-slate-400">README 数据将实时同步 GitHub 仓库内容</span>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <select id="doc-selector" class="px-4 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-700 bg-white hover:border-primary transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50">
+                            <option value="">README (默认)</option>
+                            <option value="CONFIGURATION.md">配置指南</option>
+                            <option value="PROJECT_SUMMARY.md">项目摘要</option>
+                            <option value="CHANGELOG.md">更新日志</option>
+                            <option value="CONTRIBUTING.md">贡献指南</option>
+                            <option value="OPTIMIZATION.md">优化建议</option>
+                        </select>
+                        <span class="text-xs text-slate-400">实时同步 GitHub 仓库</span>
+                    </div>
                 </div>
             </section>
 
