@@ -104,10 +104,14 @@ export async function handleProxyRequest(request, env, provider = 'ollama') {
       }
 
       try {
-        // 转发请求到 Ollama API
+        // 转发请求到 Ollama API，传递原始 User-Agent
+        const upstreamHeaders = buildUpstreamHeaders(normalizedProvider, apiKey, env, {
+          'User-Agent': userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        });
+
         const response = await fetch(providerConfig.upstream.chatCompletions, {
           method: 'POST',
-          headers: buildUpstreamHeaders(normalizedProvider, apiKey, env),
+          headers: upstreamHeaders,
           body: JSON.stringify(requestBody)
         });
 

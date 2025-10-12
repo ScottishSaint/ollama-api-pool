@@ -53,6 +53,11 @@ export function buildUpstreamHeaders(provider, apiKey, env, extraHeaders = {}) {
     ...extraHeaders
   };
 
+  // 传递原始 User-Agent，避免被识别为代理池
+  if (extraHeaders['User-Agent']) {
+    headers['User-Agent'] = extraHeaders['User-Agent'];
+  }
+
   if (normalized === 'openrouter') {
     const referer = env?.OPENROUTER_APP_URL || env?.PUBLIC_SITE_URL || 'https://openrouter.ai';
     const title = env?.OPENROUTER_APP_TITLE || 'OpenRouter API Pool';
