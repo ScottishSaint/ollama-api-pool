@@ -13,7 +13,7 @@ import { handleProxyRequest } from './proxy';
 import { handleAuth } from './auth';
 import { handleAdmin } from './admin';
 import { handleDashboard, handleUserDashboard } from './dashboard';
-import { corsHeaders, jsonResponse, errorResponse } from './utils';
+import { corsHeaders, jsonResponse, errorResponse, getRandomUserAgent } from './utils';
 import { getCachedModels, setCachedModels } from './cache';
 import { countApiKeys, getNextApiKey } from './keyManager';
 import { verifyClientToken } from './auth';
@@ -78,6 +78,9 @@ export default {
         return handleStaticHtml('/project.html', env);
       } else if (path === '/project/meta') {
         return handleProjectMeta();
+      } else if (path === '/project/docs') {
+        // 获取项目文档（支持查询参数 ?file=xxx.md）
+        return handleProjectDocs(url);
       } else if (path === '/api/test-templates') {
         return jsonResponse({ templates: getTestTemplatesPayload() });
       } else if (path.startsWith('/js/')) {
@@ -162,7 +165,7 @@ async function handleProjectMeta() {
 
   try {
     const baseHeaders = {
-      'User-Agent': 'ollama-api-pool-worker',
+      'User-Agent': getRandomUserAgent(),
       Accept: 'application/vnd.github+json'
     };
 
@@ -220,6 +223,72 @@ async function handleProjectMeta() {
       return jsonResponse({ ...projectMetaCache.data, cached: true });
     }
     return errorResponse('Failed to load project metadata', 502);
+  }
+}
+
+// 获取项目文档（Markdown 文件）
+const DOC_FILE_CACHE = new Map();
+const DOC_CACHE_TTL = 10 * 60 * 1000; // 10 分钟缓存
+
+async function handleProjectDocs(url) {
+  const allowedFiles = [
+    'README.md',
+    'README_EN.md',
+    'CONFIGURATION.md',
+    'PROJECT_SUMMARY.md',
+    'CHANGELOG.md',
+    'CONTRIBUTING.md',
+    'OPTIMIZATION.md'
+  ];
+
+  const fileName = url.searchParams.get('file');
+  if (!fileName || !allowedFiles.includes(fileName)) {
+    return errorResponse('Invalid or missing file parameter. Allowed files: ' + allowedFiles.join(', '), 400);
+  }
+
+  // 检查缓存
+  const cached = DOC_FILE_CACHE.get(fileName);
+  if (cached && Date.now() - cached.timestamp < DOC_CACHE_TTL) {
+    return new Response(cached.content, {
+      headers: {
+        'Content-Type': 'text/markdown; charset=utf-8',
+        'X-Cache': 'HIT',
+        ...corsHeaders
+      }
+    });
+  }
+
+  try {
+    // 从 GitHub raw content 获取文件
+    const rawUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/${fileName}`;
+    const response = await fetch(rawUrl, {
+      headers: {
+        'User-Agent': getRandomUserAgent()
+      }
+    });
+
+    if (!response.ok) {
+      return errorResponse(`Failed to fetch ${fileName}: ${response.status} ${response.statusText}`, response.status);
+    }
+
+    const content = await response.text();
+
+    // 更新缓存
+    DOC_FILE_CACHE.set(fileName, {
+      content,
+      timestamp: Date.now()
+    });
+
+    return new Response(content, {
+      headers: {
+        'Content-Type': 'text/markdown; charset=utf-8',
+        'X-Cache': 'MISS',
+        ...corsHeaders
+      }
+    });
+  } catch (error) {
+    console.error(`Error fetching ${fileName}:`, error);
+    return errorResponse(`Failed to fetch ${fileName}: ${error.message}`, 500);
   }
 }
 
