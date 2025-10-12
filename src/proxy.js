@@ -28,6 +28,27 @@ export async function handleProxyRequest(request, env, provider = 'ollama') {
     const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
     const userAgent = request.headers.get('User-Agent') || '';
 
+    // 收集可透传的客户端请求头，让请求看起来更像真实用户
+    const clientHeaders = {};
+    const headersToForward = [
+      'User-Agent',
+      'Accept-Language',
+      'Accept-Encoding',
+      'Referer',
+      'Origin',
+      'DNT',
+      'Sec-CH-UA',
+      'Sec-CH-UA-Mobile',
+      'Sec-CH-UA-Platform'
+    ];
+
+    for (const header of headersToForward) {
+      const value = request.headers.get(header);
+      if (value) {
+        clientHeaders[header] = value;
+      }
+    }
+
     // 1. User-Agent 检测（基本bot过滤，仅日志，不消耗 KV）
     if (enableBotDetection) {
       const suspiciousBots = ['python-requests', 'curl/', 'wget/', 'scrapy', 'bot', 'spider', 'crawler'];
@@ -104,9 +125,10 @@ export async function handleProxyRequest(request, env, provider = 'ollama') {
       }
 
       try {
-        // 转发请求到上游 API，传递原始 User-Agent（若无则使用随机 UA）
+        // 转发请求到上游 API，透传客户端请求头（若无则使用随机 UA）
         const upstreamHeaders = buildUpstreamHeaders(normalizedProvider, apiKey, env, {
-          'User-Agent': userAgent || getRandomUserAgent()
+          ...clientHeaders,
+          'User-Agent': clientHeaders['User-Agent'] || getRandomUserAgent()
         });
 
         const response = await fetch(providerConfig.upstream.chatCompletions, {

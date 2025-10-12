@@ -234,6 +234,7 @@ async function handleProjectDocs(url) {
   const allowedFiles = [
     'README.md',
     'README_EN.md',
+    'API_PARAMETERS.md',
     'CONFIGURATION.md',
     'PROJECT_SUMMARY.md',
     'CHANGELOG.md',
