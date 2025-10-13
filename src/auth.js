@@ -202,10 +202,11 @@ function normalizeEmail(email) {
   return email ? String(email).trim().toLowerCase() : '';
 }
 
+const EMAIL_REGEX = /^[a-z0-9]+([._%+-][a-z0-9]+)*@([a-z0-9-]+\.)+[a-z]{2,}$/i;
+
 function validateEmail(email) {
   const value = normalizeEmail(email);
-  const regex = /^[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}$/;
-  return regex.test(value);
+  return EMAIL_REGEX.test(value);
 }
 
 function generateVerificationCode() {

@@ -90,8 +90,10 @@ function showToast(message, type) {
     }, 3800);
 }
 
+var EMAIL_REGEX = /^[a-z0-9]+([._%+-][a-z0-9]+)*@([a-z0-9-]+\.)+[a-z]{2,}$/i;
+
 function isValidEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    return EMAIL_REGEX.test(email);
 }
 
 function setAuthTabActive(tab) {
